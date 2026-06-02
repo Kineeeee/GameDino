@@ -1,0 +1,785 @@
+/* System Design - Dino Chrome Modern Retro Edition */
+
+/* --- CORE VARIABLES & THEMES --- */
+:root {
+  /* Default: Synthwave Sunset Theme */
+  --bg-gradient: linear-gradient(135deg, #0d0826 0%, #170d3d 50%, #2a0845 100%);
+  --panel-bg: rgba(26, 17, 58, 0.7);
+  --panel-border: rgba(255, 0, 127, 0.3);
+  --accent-color: #ff007f;       /* Neon Pink */
+  --accent-glow: 0 0 15px rgba(255, 0, 127, 0.6);
+  --secondary-color: #00f3ff;    /* Neon Cyan */
+  --secondary-glow: 0 0 15px rgba(0, 243, 255, 0.6);
+  --text-main: #ffffff;
+  --text-muted: #8b80b6;
+  --font-hud: 'Orbitron', sans-serif;
+  --font-retro: 'Press Start 2P', monospace;
+  --font-body: 'Inter', sans-serif;
+  
+  --canvas-bg: #12092e;
+  --canvas-border: rgba(0, 243, 255, 0.4);
+  --canvas-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 0, 127, 0.2);
+  
+  --btn-grad: linear-gradient(90deg, #ff007f, #b500ba);
+  --btn-accent-grad: linear-gradient(90deg, #00f3ff, #0088ff);
+  --card-radius: 16px;
+  --transition-speed: 0.3s;
+}
+
+/* Chrome Classic Light Theme */
+.theme-classic-light {
+  --bg-gradient: linear-gradient(135deg, #f7f7f7 0%, #e0e0e0 100%);
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --panel-border: rgba(83, 83, 83, 0.2);
+  --accent-color: #535353;
+  --accent-glow: none;
+  --secondary-color: #757575;
+  --secondary-glow: none;
+  --text-main: #535353;
+  --text-muted: #757575;
+  --font-hud: 'Press Start 2P', monospace;
+  --font-retro: 'Press Start 2P', monospace;
+  --font-body: 'Press Start 2P', monospace;
+  --canvas-bg: #f7f7f7;
+  --canvas-border: #535353;
+  --canvas-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --btn-grad: linear-gradient(90deg, #535353, #757575);
+  --btn-accent-grad: linear-gradient(90deg, #6e6e6e, #919191);
+}
+
+/* Chrome Classic Dark Theme */
+.theme-classic-dark {
+  --bg-gradient: linear-gradient(135deg, #202124 0%, #121214 100%);
+  --panel-bg: rgba(32, 33, 36, 0.95);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --accent-color: #e8eaed;
+  --accent-glow: none;
+  --secondary-color: #9aa0a6;
+  --secondary-glow: none;
+  --text-main: #e8eaed;
+  --text-muted: #9aa0a6;
+  --font-hud: 'Press Start 2P', monospace;
+  --font-retro: 'Press Start 2P', monospace;
+  --font-body: 'Press Start 2P', monospace;
+  --canvas-bg: #202124;
+  --canvas-border: #e8eaed;
+  --canvas-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --btn-grad: linear-gradient(90deg, #e8eaed, #9aa0a6);
+  --btn-accent-grad: linear-gradient(90deg, #9aa0a6, #5f6368);
+}
+
+/* Cyberpunk Neon Theme */
+.theme-cyberpunk {
+  --bg-gradient: linear-gradient(135deg, #05050a 0%, #0c0f12 100%);
+  --panel-bg: rgba(10, 15, 20, 0.85);
+  --panel-border: rgba(0, 255, 102, 0.3);
+  --accent-color: #00ff66;       /* Toxic Green */
+  --accent-glow: 0 0 15px rgba(0, 255, 102, 0.6);
+  --secondary-color: #f7e018;    /* Cyber Yellow */
+  --secondary-glow: 0 0 15px rgba(247, 224, 24, 0.5);
+  --text-main: #00ff66;
+  --text-muted: #4e835e;
+  --font-hud: 'Orbitron', sans-serif;
+  --font-retro: 'Press Start 2P', monospace;
+  --font-body: 'Inter', sans-serif;
+  
+  --canvas-bg: #000000;
+  --canvas-border: #00ff66;
+  --canvas-shadow: 0 10px 40px rgba(0, 255, 102, 0.15);
+  
+  --btn-grad: linear-gradient(90deg, #00ff66, #00aa44);
+  --btn-accent-grad: linear-gradient(90deg, #f7e018, #f78c18);
+}
+
+/* --- RESET & GLOBAL STYLES --- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #ffffff;
+  color: #333333;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+.theme-classic-light, .theme-classic-dark {
+  font-size: 11px;
+}
+
+/* --- MAIN WRAPPER --- */
+.game-wrapper {
+  width: 100%;
+  max-width: 1000px; /* Expanded wrapper size to make game physically larger on screen */
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  transition: color var(--transition-speed) ease, font-family var(--transition-speed) ease;
+}
+
+/* --- GAME HEADER & DASHBOARD --- */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  padding: 15px 25px;
+  border-radius: var(--card-radius);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1), var(--accent-glow);
+  transition: all var(--transition-speed) ease;
+}
+
+.logo-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-text {
+  font-family: var(--font-hud);
+  font-weight: 900;
+  font-size: 1.5rem;
+  letter-spacing: 2px;
+  color: var(--accent-color);
+  text-shadow: var(--accent-glow);
+}
+
+.logo-subtext {
+  font-family: var(--font-hud);
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 4px;
+  color: var(--secondary-color);
+  text-shadow: var(--secondary-glow);
+  margin-top: -2px;
+}
+
+.controls-panel {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.modern-select {
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--text-main);
+  border: 1px solid var(--panel-border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  cursor: pointer;
+  outline: none;
+  transition: border var(--transition-speed) ease;
+}
+
+.modern-select:hover, .modern-select:focus {
+  border-color: var(--secondary-color);
+}
+
+.icon-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  color: var(--text-main);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-speed) ease;
+  position: relative;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--btn-grad);
+  border-color: transparent;
+  transform: scale(1.08);
+  box-shadow: var(--accent-glow);
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.icon {
+  transition: transform 0.2s ease;
+}
+
+.icon-btn:active:not(:disabled) .icon {
+  transform: scale(0.9);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* --- GAME SCREEN CONTAINER --- */
+.game-container {
+  position: relative;
+  width: 100%;
+  border-radius: var(--card-radius);
+  overflow: visible; /* Changed to visible to allow overlays to overflow gracefully on narrow screens */
+  border: 2px solid var(--canvas-border);
+  box-shadow: var(--canvas-shadow);
+  aspect-ratio: 800 / 340; /* Expanded height aspect ratio to prevent clipping and overlap */
+  transition: all var(--transition-speed) ease;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--canvas-bg);
+  image-rendering: pixelated; /* Keeps pixel-art feeling crisp */
+  border-radius: calc(var(--card-radius) - 2px); /* Rounds the canvas corners to match the border */
+}
+
+/* --- HUD OVERLAY --- */
+.game-hud {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  display: flex;
+  gap: 25px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.hud-label {
+  font-family: var(--font-hud);
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.hud-value {
+  font-family: var(--font-retro);
+  font-size: 1.15rem;
+  color: var(--text-main);
+  text-shadow: var(--accent-glow);
+  margin-top: 4px;
+}
+
+/* Powerups status panel */
+.powerup-status {
+  position: absolute;
+  top: 15px;
+  left: 20px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--secondary-color);
+  box-shadow: var(--secondary-glow);
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 160px;
+  animation: slideInDown 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  pointer-events: none;
+}
+
+.powerup-name {
+  font-family: var(--font-hud);
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: var(--secondary-color);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.progress-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--secondary-color);
+  box-shadow: var(--secondary-glow);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+/* --- OVERLAYS: START, PAUSE, GAMEOVER --- */
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(10, 5, 25, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  border-radius: calc(var(--card-radius) - 2px); /* Keeps overlay glassmorphism within rounded corners */
+}
+
+.overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay-content {
+  text-align: center;
+  padding: 15px 30px; /* Reduced to fit in 800x300 canvas height */
+  max-width: 500px;
+  width: 90%;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), var(--accent-glow);
+  border-radius: 16px; /* Slightly tighter border radius */
+  transform: scale(0.9);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.overlay.active .overlay-content {
+  transform: scale(1);
+}
+
+/* Character Glow */
+.dino-character-glow {
+  font-size: 2.5rem; /* Reduced to fit in 800x300 canvas height */
+  margin-bottom: 8px;
+  display: inline-block;
+  animation: pulseFloat 3s infinite ease-in-out;
+  filter: drop-shadow(var(--accent-glow));
+}
+
+.overlay-title {
+  font-family: var(--font-hud);
+  font-weight: 900;
+  font-size: 1.4rem; /* Reduced to fit in 800x300 canvas height */
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+  color: var(--text-main);
+  text-shadow: var(--accent-glow);
+}
+
+.gameover-text {
+  color: var(--accent-color);
+  animation: glitched 1.5s infinite;
+}
+
+.overlay-instructions {
+  font-size: 0.8rem; /* Slightly smaller instructions font */
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.overlay-instructions strong {
+  color: var(--secondary-color);
+}
+
+/* Keyboard controls layout */
+.keyboard-guide {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 15px; /* Reduced margin */
+  flex-wrap: wrap;
+}
+
+.guide-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 10px; /* Thinner padding */
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  min-width: 80px; /* Slightly narrower */
+}
+
+.key-cap {
+  font-family: var(--font-retro);
+  font-size: 0.6rem; /* Slightly smaller keys */
+  background: #2b2b45;
+  border: 1.5px solid #ff007f;
+  box-shadow: 0 2px 0 #ff007f, var(--accent-glow);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #fff;
+  display: inline-block;
+}
+
+.guide-desc {
+  font-size: 0.75rem; /* Better description size */
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Glassmorphism Buttons */
+.primary-btn {
+  background: var(--btn-grad);
+  border: none;
+  color: white;
+  padding: 8px 24px; /* Reduced vertical padding */
+  font-family: var(--font-hud);
+  font-size: 0.85rem; /* Slightly smaller button font */
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-radius: 30px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(255, 0, 127, 0.4), var(--accent-glow);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.primary-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  transform: rotate(45deg);
+  transition: transform 0.6s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 6px 20px rgba(255, 0, 127, 0.6), var(--accent-glow);
+}
+
+.primary-btn:hover::after {
+  transform: translate(50%, 50%) rotate(45deg);
+}
+
+.primary-btn:active {
+  transform: translateY(1px);
+}
+
+.accent-btn {
+  background: var(--btn-accent-grad);
+  box-shadow: 0 4px 15px rgba(0, 243, 255, 0.4), var(--secondary-glow);
+}
+
+.accent-btn:hover {
+  box-shadow: 0 6px 20px rgba(0, 243, 255, 0.6), var(--secondary-glow);
+}
+
+/* Pause screen overlay symbol */
+.pause-symbol {
+  font-family: var(--font-hud);
+  font-weight: 900;
+  font-size: 2.2rem; /* Reduced pause sign */
+  color: var(--secondary-color);
+  text-shadow: var(--secondary-glow);
+  margin-bottom: 6px;
+  animation: pulseScale 2s infinite ease-in-out;
+}
+
+/* Gameover Screen Stats */
+.game-over-art {
+  font-size: 2.5rem; /* Reduced emoji art */
+  margin-bottom: 8px;
+  animation: bounceCrash 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.stats-panel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px; /* Reduced gap */
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 12px; /* Reduced padding */
+  border-radius: 12px;
+  margin-bottom: 15px; /* Reduced margin */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-family: var(--font-hud);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--secondary-color);
+}
+
+/* --- MOBILE ON-SCREEN CONTROLS --- */
+.mobile-controls {
+  display: none; /* Hidden on desktop */
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 10px;
+  z-index: 15;
+}
+
+.mobile-btn-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid var(--panel-border);
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  font-family: var(--font-hud);
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.mobile-btn-circle:active {
+  transform: scale(0.85);
+  background: var(--btn-grad);
+  border-color: transparent;
+  box-shadow: var(--accent-glow);
+}
+
+.jump-btn:active {
+  background: var(--btn-accent-grad);
+  box-shadow: var(--secondary-glow);
+}
+
+/* Show mobile controls when touch utility is detected or window is narrow */
+@media (max-width: 768px) {
+  .mobile-controls {
+    display: flex;
+  }
+  
+  .keyboard-guide {
+    display: none; /* Hide keyboard instructions on small screens */
+  }
+
+  .game-wrapper {
+    padding: 10px;
+    gap: 12px;
+  }
+
+  /* Compact Header */
+  .game-header {
+    padding: 10px 15px;
+    gap: 10px;
+  }
+  .logo-text {
+    font-size: 1.2rem;
+  }
+  .logo-subtext {
+    font-size: 0.7rem;
+  }
+  .controls-panel {
+    gap: 8px;
+  }
+  .modern-select {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .icon-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Full-screen Overlays for narrow screens to avoid clipping inside the aspect-ratio box */
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+  }
+  
+  .overlay-content {
+    padding: 18px 25px;
+    max-width: 90%;
+    border-radius: 16px;
+  }
+  
+  .dino-character-glow, .game-over-art {
+    font-size: 2.2rem;
+    margin-bottom: 8px;
+  }
+  
+  .overlay-title {
+    font-size: 1.35rem;
+    margin-bottom: 6px;
+  }
+  
+  .overlay-instructions {
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+  
+  .primary-btn {
+    padding: 8px 20px;
+    font-size: 0.85rem;
+  }
+
+  /* Compact Overlays elements */
+  .stats-panel {
+    padding: 8px 12px;
+    gap: 8px;
+    margin-bottom: 15px;
+  }
+  .stat-value {
+    font-size: 0.95rem;
+  }
+  .stat-label {
+    font-size: 0.6rem;
+  }
+  .pause-symbol {
+    font-size: 2rem;
+  }
+
+  /* Compact HUD & Powerup to prevent overlap */
+  .game-hud {
+    top: 8px;
+    right: 10px;
+    gap: 12px;
+  }
+  .hud-label {
+    font-size: 0.6rem;
+  }
+  .hud-value {
+    font-size: 0.9rem;
+  }
+  
+  .powerup-status {
+    top: 8px;
+    left: 10px;
+    width: 115px;
+    padding: 4px 8px;
+  }
+  .powerup-name {
+    font-size: 0.55rem;
+  }
+}
+
+/* Extra small devices optimization */
+@media (max-width: 480px) {
+  .game-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 12px;
+  }
+  .logo-area {
+    align-items: center;
+  }
+  .controls-panel {
+    justify-content: center;
+  }
+  .overlay-content {
+    padding: 12px 15px;
+  }
+  .dino-character-glow, .game-over-art {
+    font-size: 1.8rem;
+  }
+  .overlay-title {
+    font-size: 1.15rem;
+  }
+}
+
+/* --- GAME FOOTER --- */
+.game-footer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  margin-top: 10px;
+}
+
+/* --- ANIMATIONS & GLITCH EFFECTS --- */
+@keyframes pulseFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(5deg); }
+}
+
+@keyframes pulseScale {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes bounceCrash {
+  0% { transform: scale(0) rotate(-45deg); }
+  70% { transform: scale(1.2) rotate(15deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes slideInDown {
+  from { transform: translateY(-50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes glitched {
+  0%, 100% { text-shadow: 2px 0 0 rgba(255,0,0,0.5), -2px 0 0 rgba(0,0,255,0.5); }
+  25% { text-shadow: -2px 0 0 rgba(255,0,0,0.5), 2px 0 0 rgba(0,0,255,0.5); }
+  50% { text-shadow: 2px -2px 0 rgba(255,0,0,0.5), -2px 2px 0 rgba(0,0,255,0.5); }
+  75% { text-shadow: -2px -2px 0 rgba(255,0,0,0.5), 2px 2px 0 rgba(0,0,255,0.5); }
+}

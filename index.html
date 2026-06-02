@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dino Chrome - Modern Retro Edition</title>
+  <!-- Google Fonts: Retro pixel, Cyberpunk sci-fi, and Modern body text -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Orbitron:wght@500;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-wrapper theme-classic-light">
+    <!-- Main Header / Controls Dashboard -->
+    <header class="game-header">
+      <div class="logo-area">
+        <h1 class="logo-text">CHROME DINO</h1>
+        <span class="logo-subtext">MODERN RETRO</span>
+      </div>
+      
+      <div class="controls-panel">
+        <!-- Game Mode Toggle -->
+        <div class="control-group">
+          <label for="mode-select" class="control-label">Mode</label>
+          <select id="mode-select" class="modern-select">
+            <option value="classic">Classic</option>
+            <option value="arcade" selected>Arcade (+ Powerups)</option>
+          </select>
+        </div>
+
+        <!-- Theme Selector -->
+        <div class="control-group">
+          <label for="theme-select" class="control-label">Theme</label>
+          <select id="theme-select" class="modern-select">
+            <option value="classic-light" selected>Chrome Classic (Light)</option>
+            <option value="classic-dark">Chrome Classic (Dark)</option>
+            <option value="synthwave">Synthwave Sunset</option>
+            <option value="cyberpunk">Cyberpunk Neon</option>
+          </select>
+        </div>
+
+        <!-- Audio Control -->
+        <button id="sound-btn" class="icon-btn" title="Toggle Sound">
+          <svg id="sound-on-icon" class="icon" viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.85 14,18.71V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.77 16.5,12M3,9V15H7L12,20V4L7,9H3Z" />
+          </svg>
+          <svg id="sound-off-icon" class="icon hidden" viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M12,4L9.91,6.09L12,8.18M4.27,3L3,4.27L7.73,9H3V15H7L12,20V13.27L16.25,17.53C15.58,18.04 14.83,18.43 14,18.7V20.77C15.38,20.44 16.63,19.78 17.7,18.9L20.73,21.93L22,20.66L4.27,3M12,5.86V10.73L8.84,7.58M16.5,12C16.5,10.23 15.5,8.71 14,7.97V10.18L16.45,12.63C16.48,12.43 16.5,12.22 16.5,12M19,12C19,12.94 18.8,13.82 18.46,14.64L19.97,16.15C20.62,14.91 21,13.5 21,12C21,7.72 18,4.14 14,3.23V5.29C16.89,6.15 19,8.83 19,12Z" />
+          </svg>
+        </button>
+
+        <!-- Pause Control -->
+        <button id="pause-btn" class="icon-btn" title="Pause Game (P / ESC)" disabled>
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M14,19H18V5H14M6,19H10V5H6V19Z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Game Screen Area -->
+    <div class="game-container">
+      <!-- HUD / Real-time stats -->
+      <div class="game-hud">
+        <div class="hud-item high-score-box">
+          <span class="hud-label">HIGH</span>
+          <span id="high-score" class="hud-value">00000</span>
+        </div>
+        <div class="hud-item score-box">
+          <span class="hud-label font-neon">SCORE</span>
+          <span id="current-score" class="hud-value">00000</span>
+        </div>
+      </div>
+
+      <!-- Powerups bar (only in Arcade mode) -->
+      <div id="powerup-status" class="powerup-status hidden">
+        <span id="powerup-name" class="powerup-name">SHIELD ACTIVATED</span>
+        <div class="progress-container">
+          <div id="powerup-progress" class="progress-bar" style="width: 100%"></div>
+        </div>
+      </div>
+
+      <!-- Main HTML5 Canvas -->
+      <canvas id="game-canvas" width="800" height="300"></canvas>
+
+      <!-- Glassmorphic HUD Overlays -->
+      
+      <!-- Start / Ready Screen Overlay -->
+      <div id="start-overlay" class="overlay active">
+        <div class="overlay-content">
+          <div class="dino-character-glow">🦕</div>
+          <h2 class="overlay-title">READY?</h2>
+          <p class="overlay-instructions">Press <strong>SPACE</strong> or click to start running!</p>
+          
+          <div class="keyboard-guide">
+            <div class="guide-item">
+              <span class="key-cap">▲</span> / <span class="key-cap">SPACE</span>
+              <span class="guide-desc">Jump</span>
+            </div>
+            <div class="guide-item">
+              <span class="key-cap">▼</span>
+              <span class="guide-desc">Duck</span>
+            </div>
+            <div class="guide-item">
+              <span class="key-cap">P</span> / <span class="key-cap">ESC</span>
+              <span class="guide-desc">Pause</span>
+            </div>
+          </div>
+
+          <button id="start-game-btn" class="primary-btn">PLAY NOW</button>
+        </div>
+      </div>
+
+      <!-- Pause Screen Overlay -->
+      <div id="pause-overlay" class="overlay hidden">
+        <div class="overlay-content">
+          <div class="pause-symbol">II</div>
+          <h2 class="overlay-title">PAUSED</h2>
+          <p class="overlay-instructions">Take a deep breath and continue the challenge!</p>
+          <button id="resume-btn" class="primary-btn">CONTINUE</button>
+        </div>
+      </div>
+
+      <!-- Game Over Screen Overlay -->
+      <div id="gameover-overlay" class="overlay hidden">
+        <div class="overlay-content">
+          <div class="game-over-art">💥</div>
+          <h2 class="overlay-title gameover-text">GAME OVER</h2>
+          
+          <!-- Statistics Panel -->
+          <div class="stats-panel">
+            <div class="stat-item">
+              <span class="stat-label">Score</span>
+              <span id="final-score" class="stat-value">00000</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Time</span>
+              <span id="final-time" class="stat-value">0s</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Evaded</span>
+              <span id="final-obstacles" class="stat-value">0</span>
+            </div>
+          </div>
+
+          <button id="restart-game-btn" class="primary-btn accent-btn">PLAY AGAIN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Touch Controls overlay -->
+    <div id="mobile-controls" class="mobile-controls">
+      <button id="mobile-duck" class="mobile-btn-circle duck-btn">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
+        </svg>
+        <span>DUCK</span>
+      </button>
+      <button id="mobile-jump" class="mobile-btn-circle jump-btn">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
+        </svg>
+        <span>JUMP</span>
+      </button>
+    </div>
+
+    <!-- Footer info -->
+    <footer class="game-footer">
+      <p>Copyright © 2026. Inspired by Google Chrome Dino.</p>
+    </footer>
+  </div>
+
+  <!-- Audio Synthesis Script first, then game engine -->
+  <script src="sound.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
