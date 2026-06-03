@@ -42,7 +42,8 @@ const GAME_STATE = {
   MENU: 'menu',
   PLAYING: 'playing',
   PAUSED: 'paused',
-  GAMEOVER: 'gameover'
+  GAMEOVER: 'gameover',
+  CRASHED: 'crashed'
 };
 
 const POWERUP_TYPE = {
@@ -75,6 +76,7 @@ let lastTime = 0; // for delta time calculation
 let screenShake = 0; // screenshake magnitude
 let nextObstacleTimer = 0;
 let nextPowerUpTimer = 0;
+let crashTimeoutId = null;
 
 // Entities collections
 let dino = null;
@@ -1834,6 +1836,10 @@ function toggleSound() {
 // --- GAME LOGIC FLOW ---
 
 function startGame() {
+  if (crashTimeoutId) {
+    clearTimeout(crashTimeoutId);
+    crashTimeoutId = null;
+  }
   state = GAME_STATE.PLAYING;
   
   // Hide UI overlays
@@ -1888,7 +1894,7 @@ function resumeGame() {
 }
 
 function triggerGameOver() {
-  state = GAME_STATE.GAMEOVER;
+  state = GAME_STATE.CRASHED;
   dino.isCrashed = true;
   pauseBtn.disabled = true;
   
@@ -1898,6 +1904,17 @@ function triggerGameOver() {
   
   soundManager.playGameOver();
   saveHighScore();
+  
+  crashTimeoutId = setTimeout(() => {
+    crashTimeoutId = null;
+    if (state === GAME_STATE.CRASHED) {
+      showGameOverScreen();
+    }
+  }, 1500);
+}
+
+function showGameOverScreen() {
+  state = GAME_STATE.GAMEOVER;
   
   // UI Display
   finalScoreVal.textContent = String(score).padStart(5, '0');
@@ -2476,28 +2493,34 @@ function gameLoop(timestamp) {
   }
 
   // DRAWING AND LOGIC BRANCHES
-  if (state === GAME_STATE.PLAYING) {
+  if (state === GAME_STATE.PLAYING || state === GAME_STATE.CRASHED) {
     // 1. Physics update & Difficulty acceleration
-    const isSlow = dino && dino.activePowerUp === POWERUP_TYPE.SLOW_MOTION;
-    if (currentSpeed < MAX_SPEED) {
-      const slowMult = isSlow ? 0.3 : 1.0;
-      currentSpeed += ACCELERATION * dt * slowMult;
+    if (state === GAME_STATE.PLAYING) {
+      const isSlow = dino && dino.activePowerUp === POWERUP_TYPE.SLOW_MOTION;
+      if (currentSpeed < MAX_SPEED) {
+        const slowMult = isSlow ? 0.3 : 1.0;
+        currentSpeed += ACCELERATION * dt * slowMult;
+      }
     }
 
     // 2. Entities updating
     dino.update(dt);
-    updateSpawns(dt);
+    if (state === GAME_STATE.PLAYING) {
+      updateSpawns(dt);
+    }
     
-    // Scenery background
-    drawScenery(dt);
+    // Scenery background (scroll only if playing)
+    drawScenery(state === GAME_STATE.PLAYING ? dt : 0);
 
     // Obstacles loop
     obstacles.forEach(obs => {
-      obs.update(dt);
+      if (state === GAME_STATE.PLAYING) {
+        obs.update(dt);
+      }
       obs.draw();
       
       // Collision checker
-      if (checkCollision(dino.getHitbox(), obs.getHitbox())) {
+      if (state === GAME_STATE.PLAYING && checkCollision(dino.getHitbox(), obs.getHitbox())) {
         if (dino.activePowerUp === POWERUP_TYPE.SHIELD) {
           // Shield absorbs collision
           dino.deactivatePowerUp();
@@ -2514,7 +2537,7 @@ function gameLoop(timestamp) {
       }
       
       // Pass stats tracking
-      if (!obs.passed && obs.x + obs.width < dino.x) {
+      if (state === GAME_STATE.PLAYING && !obs.passed && obs.x + obs.width < dino.x) {
         obs.passed = true;
         obstaclesAvoided++;
       }
@@ -2522,11 +2545,13 @@ function gameLoop(timestamp) {
     
     // Powerups loop
     powerups.forEach(pw => {
-      pw.update(dt);
+      if (state === GAME_STATE.PLAYING) {
+        pw.update(dt);
+      }
       pw.draw();
       
       // Touch collection checker
-      if (checkCollision(dino.getHitbox(), pw.getHitbox())) {
+      if (state === GAME_STATE.PLAYING && checkCollision(dino.getHitbox(), pw.getHitbox())) {
         pw.markedForDeletion = true;
         
         // 8 seconds of power-up duration
