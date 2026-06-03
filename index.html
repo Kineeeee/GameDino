@@ -71,6 +71,16 @@
     <div class="game-container">
       <!-- HUD / Real-time stats -->
       <div class="game-hud">
+        <div class="hud-item ammo-box hidden" id="hud-ammo-box">
+          <span class="hud-label">AMMO</span>
+          <div id="ammo-counter" class="ammo-counter">
+            <span class="ammo-segment"></span>
+            <span class="ammo-segment"></span>
+            <span class="ammo-segment"></span>
+            <span class="ammo-segment"></span>
+            <span class="ammo-segment"></span>
+          </div>
+        </div>
         <div class="hud-item high-score-box">
           <span class="hud-label">HIGH</span>
           <span id="high-score" class="hud-value">00000</span>
@@ -164,6 +174,12 @@
           <path fill="currentColor" d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
         </svg>
         <span>DUCK</span>
+      </button>
+      <button id="mobile-shoot" class="mobile-btn-circle shoot-btn hidden">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z" />
+        </svg>
+        <span>SHOOT</span>
       </button>
       <button id="mobile-jump" class="mobile-btn-circle jump-btn">
         <svg viewBox="0 0 24 24" width="28" height="28">
@@ -335,8 +351,9 @@
 
   </div>
 
-  <!-- Audio Synthesis Script first, then game engine -->
+  <!-- Audio Synthesis Script first, then combat engine, then game engine -->
   <script src="sound.js"></script>
+  <script src="combat.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

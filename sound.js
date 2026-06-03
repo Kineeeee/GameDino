@@ -246,6 +246,142 @@ class SoundManager {
       console.warn("Noise buffer generation failed, falling back to oscillator only:", e);
     }
   }
+
+  /**
+   * SHOOT Sound: Quick high-to-low laser sweep
+   */
+  playShoot() {
+    this.init();
+    const synth = this.createSynth('triangle', 0.12);
+    if (!synth) return;
+
+    const { osc, gain, now } = synth;
+
+    // Pitch sweep: 880Hz -> 220Hz
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.1);
+
+    // Volume envelope
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  /**
+   * EXPLOSION Sound: White noise explosion with bandpass filter decay
+   */
+  playExplosion() {
+    this.init();
+    if (this.isMuted || !this.ctx) return;
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+
+    const now = this.ctx.currentTime;
+
+    try {
+      const bufferSize = this.ctx.sampleRate * 0.35; // 0.35 seconds
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseNode = this.ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, now);
+      filter.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+      
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.18, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      
+      noiseNode.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+      
+      noiseNode.start(now);
+      noiseNode.stop(now + 0.35);
+    } catch (e) {
+      console.warn("Explosion noise buffer failed, playing oscillator fallback:", e);
+      // Fallback deep beep
+      const synth = this.createSynth('sawtooth', 0.2);
+      if (synth) {
+        const { osc, gain } = synth;
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(30, now + 0.2);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+    }
+  }
+
+  /**
+   * RELOAD Sound: Rising double-beep
+   */
+  playReload() {
+    this.init();
+    if (this.isMuted || !this.ctx) return;
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+
+    const now = this.ctx.currentTime;
+
+    // First beep: 587Hz (D5)
+    const osc1 = this.ctx.createOscillator();
+    const gain1 = this.ctx.createGain();
+    osc1.type = 'square';
+    osc1.frequency.setValueAtTime(587, now);
+    gain1.gain.setValueAtTime(0.06, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+    osc1.connect(gain1);
+    gain1.connect(this.ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.05);
+
+    // Second beep: 880Hz (A5) after 0.05s
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(880, now + 0.05);
+    gain2.gain.setValueAtTime(0.06, now + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+    osc2.connect(gain2);
+    gain2.connect(this.ctx.destination);
+    osc2.start(now + 0.05);
+    osc2.stop(now + 0.13);
+  }
+
+  /**
+   * DRY FIRE Sound: Short low buzz for no ammo
+   */
+  playDryFire() {
+    this.init();
+    const synth = this.createSynth('triangle', 0.08);
+    if (!synth) return;
+
+    const { osc, gain, now } = synth;
+
+    osc.frequency.setValueAtTime(120, now);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
 }
 
 // Global instance of SoundManager

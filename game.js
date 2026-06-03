@@ -36,6 +36,9 @@ const powerupProgress = document.getElementById('powerup-progress');
 
 const mobileDuckBtn = document.getElementById('mobile-duck');
 const mobileJumpBtn = document.getElementById('mobile-jump');
+const hudAmmoBox = document.getElementById('hud-ammo-box');
+const ammoCounter = document.getElementById('ammo-counter');
+const mobileShootBtn = document.getElementById('mobile-shoot');
 
 // --- GAME CONSTANTS & STATE ---
 const GAME_STATE = {
@@ -76,12 +79,16 @@ let lastTime = 0; // for delta time calculation
 let screenShake = 0; // screenshake magnitude
 let nextObstacleTimer = 0;
 let nextPowerUpTimer = 0;
+let nextAmmoTimer = 0;
 let crashTimeoutId = null;
 
 // Entities collections
 let dino = null;
 let obstacles = [];
 let powerups = [];
+let projectiles = [];
+let ammoPickups = [];
+let ammo = 0;
 let particles = [];
 let clouds = [];
 let stars = []; // for synthwave/cyberpunk night sky
@@ -1787,6 +1794,83 @@ class CrashShard extends Particle {
   }
 }
 
+class FloatingText {
+  constructor(x, y, text, color) {
+    this.x = x;
+    this.y = y;
+    this.text = text;
+    this.color = color || '#ffffff';
+    this.vy = -50; // rise upwards
+    this.alpha = 1;
+    this.markedForDeletion = false;
+  }
+  update(dt) {
+    this.y += this.vy * dt;
+    this.alpha -= 1.5 * dt; // fade out quickly
+    if (this.alpha <= 0) {
+      this.markedForDeletion = true;
+    }
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.alpha);
+    ctx.fillStyle = this.color;
+    if (activeTheme.includes('classic')) {
+      ctx.font = '8px "Press Start 2P"';
+    } else {
+      ctx.font = 'bold 10px Orbitron, sans-serif';
+    }
+    ctx.textAlign = 'center';
+    ctx.fillText(this.text, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+function spawnObstacleExplosion(x, y) {
+  const numShards = 8 + Math.floor(Math.random() * 5);
+  for (let i = 0; i < numShards; i++) {
+    particles.push(new CrashShard(x, y, themeColors.obstacle));
+  }
+}
+
+function spawnFloatingText(x, y, text, color) {
+  particles.push(new FloatingText(x, y, text, color));
+}
+
+function fireProjectile() {
+  if (ammo <= 0) {
+    soundManager.playDryFire();
+    if (ammoCounter) {
+      ammoCounter.classList.add('shake');
+      setTimeout(() => {
+        ammoCounter.classList.remove('shake');
+      }, 300);
+    }
+    return;
+  }
+  
+  ammo--;
+  updateAmmoHUD();
+  soundManager.playShoot();
+  
+  const startX = dino.x + dino.width;
+  const startY = dino.y + dino.height / 2 - 4;
+  
+  projectiles.push(new Projectile(startX, startY, activeTheme));
+}
+
+function updateAmmoHUD() {
+  if (!ammoCounter) return;
+  const segments = ammoCounter.querySelectorAll('.ammo-segment');
+  segments.forEach((seg, idx) => {
+    if (idx < ammo) {
+      seg.classList.add('active');
+    } else {
+      seg.classList.remove('active');
+    }
+  });
+}
+
 // Helper generators for specific effect animations
 function spawnLandingSparks(x, y) {
   let col = activeTheme.includes('light') ? '#535353' : '#ffffff';
@@ -1953,6 +2037,8 @@ function startGame() {
   currentSpeed = INITIAL_SPEED;
   nextObstacleTimer = 1.0; // spawn first obstacle after 1s
   nextPowerUpTimer = 10.0; // spawn powerup after 10s
+  nextAmmoTimer = 6.0; // spawn first ammo pickup after 6s
+  ammo = 0;
   
   // Instantiate Dino
   dino = new DinoCharacter();
@@ -1960,7 +2046,18 @@ function startGame() {
   // Clear lists
   obstacles = [];
   powerups = [];
+  projectiles = [];
+  ammoPickups = [];
   particles = [];
+  
+  if (gameMode === 'arcade') {
+    if (hudAmmoBox) hudAmmoBox.classList.remove('hidden');
+    if (mobileShootBtn) mobileShootBtn.classList.remove('hidden');
+  } else {
+    if (hudAmmoBox) hudAmmoBox.classList.add('hidden');
+    if (mobileShootBtn) mobileShootBtn.classList.add('hidden');
+  }
+  updateAmmoHUD();
   
   // Deactivate powerup bar in classic mode
   dino.deactivatePowerUp();
@@ -2045,6 +2142,13 @@ function setupEventListeners() {
       }
     }
 
+    if (e.code === 'KeyF') {
+      e.preventDefault();
+      if (state === GAME_STATE.PLAYING && gameMode === 'arcade') {
+        fireProjectile();
+      }
+    }
+
     if (e.code === 'KeyP' || e.code === 'Escape') {
       e.preventDefault();
       if (state === GAME_STATE.PLAYING) {
@@ -2112,6 +2216,15 @@ function setupEventListeners() {
       dino.duck(false);
     }
   });
+
+  if (mobileShootBtn) {
+    mobileShootBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (state === GAME_STATE.PLAYING && gameMode === 'arcade') {
+        fireProjectile();
+      }
+    });
+  }
 
   // Clicking on canvas starts game too
   canvas.addEventListener('mousedown', (e) => {
@@ -2189,6 +2302,23 @@ function updateSpawns(dt) {
       
       // Spawn next powerup in 12-20s
       nextPowerUpTimer = 12 + Math.random() * 8;
+    }
+    
+    // 3. Spawning Ammo Pickups (only in arcade mode)
+    nextAmmoTimer -= dt * timeMult;
+    if (nextAmmoTimer <= 0) {
+      const yLevel = Math.random() < 0.6 ? 220 : 150;
+      
+      // Prevent spawning overlapping elements
+      const nearObstacle = obstacles.some(obs => obs.x > 750);
+      const nearPowerUp = powerups.some(pw => pw.x > 750);
+      
+      if (!nearObstacle && !nearPowerUp) {
+        ammoPickups.push(new AmmoPickup(yLevel, activeTheme));
+        nextAmmoTimer = 12 + Math.random() * 6;
+      } else {
+        nextAmmoTimer = 0.5; // retry soon
+      }
     }
   }
 }
@@ -2809,9 +2939,50 @@ function gameLoop(timestamp) {
       }
     });
 
+    // Projectiles loop
+    projectiles.forEach(proj => {
+      if (state === GAME_STATE.PLAYING) {
+        proj.update(dt);
+        
+        // Projectile vs Obstacle collision checker
+        obstacles.forEach(obs => {
+          if (!obs.markedForDeletion && !proj.markedForDeletion && checkCollision(proj.getHitbox(), obs.getHitbox())) {
+            proj.markedForDeletion = true;
+            obs.markedForDeletion = true;
+            score += 100;
+            soundManager.playExplosion();
+            screenShake = 4;
+            spawnObstacleExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2);
+          }
+        });
+      }
+      proj.draw(ctx, themeColors);
+    });
+
+    // Ammo Pickups loop
+    ammoPickups.forEach(ammoItem => {
+      if (state === GAME_STATE.PLAYING) {
+        ammoItem.update(dt, currentSpeed);
+        
+        // Touch collection checker
+        if (checkCollision(dino.getHitbox(), ammoItem.getHitbox())) {
+          ammoItem.markedForDeletion = true;
+          if (ammo < 5) {
+            ammo++;
+          }
+          updateAmmoHUD();
+          soundManager.playReload();
+          spawnFloatingText(ammoItem.x + ammoItem.width / 2, ammoItem.y - 10, "+1 AMMO", themeColors.secondary);
+        }
+      }
+      ammoItem.draw(ctx, themeColors);
+    });
+
     // Cleanup arrays
     obstacles = obstacles.filter(o => !o.markedForDeletion);
     powerups = powerups.filter(p => !p.markedForDeletion);
+    projectiles = projectiles.filter(p => !p.markedForDeletion);
+    ammoPickups = ammoPickups.filter(a => !a.markedForDeletion);
     
     // Particles update
     particles.forEach(p => {
@@ -2829,6 +3000,8 @@ function gameLoop(timestamp) {
 
     obstacles.forEach(o => o.draw());
     powerups.forEach(p => p.draw());
+    projectiles.forEach(p => p.draw(ctx, themeColors));
+    ammoPickups.forEach(a => a.draw(ctx, themeColors));
     particles.forEach(p => {
       p.draw();
     });
