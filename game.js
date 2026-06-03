@@ -86,6 +86,23 @@ let stars = []; // for synthwave/cyberpunk night sky
 let terrainFeatures = []; // background mountains/structures
 let groundGridOffset = 0;
 
+// --- CHARACTER CUSTOMIZATION STATE ---
+let characterConfig = {
+  skin: 'classic',          // 'classic' | 'robot' | 'ghost' | 'neon' | 'custom_image'
+  bodyColor: null,          // null = use theme default color
+  accentColor: null,        // null = use theme default eye/accent color
+  customImage: null,        // HTMLImageElement (restored from base64 at startup)
+  customImageDataUrl: null  // base64 string saved to localStorage
+};
+// Preview animation state (separate from game loop)
+let _previewAnimId   = null;
+let _previewRunFrame = 0;
+let _previewRunTimer = 0;
+let _previewLastTime = 0;
+// Color palette presets for swatches
+const CHAR_BODY_COLORS   = ['#535353','#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#6a0572','#1d3557','#ff006e','#00b4d8'];
+const CHAR_ACCENT_COLORS = ['#ffffff','#000000','#ffbe0b','#ff006e','#00f3ff','#06d6a0','#fb5607','#8338ec','#ff4d6d','#a8dadc'];
+
 // Theme configuration palette values used in Canvas drawing
 let themeColors = {
   ground: '#ff007f',
@@ -108,10 +125,14 @@ function init() {
   applyTheme(themeSelect.value);
   applySoundUI();
   
+  // Load saved character customization from localStorage
+  loadCharacterConfig();
+  
   // Create static background elements once
   generateBackgrounds();
   
   // Game Loop
+  initCustomizationModal();
   requestAnimationFrame(gameLoop);
 }
 
@@ -448,91 +469,11 @@ class DinoCharacter {
 
 // --- DINO RENDER PROCEDURES ---
 function drawDinoSprite(ctx, x, y, w, h, state, theme) {
-  // Let's render Dino using elegant shapes representing Chrome Dino.
-  // In classic mode, it is pure black/white flat vector. In Synth/Cyberpunk, it is styled with matching neon glow.
   ctx.save();
-  
-  if (state.startsWith('ducking')) {
-    // Squished ducking Dino!
-    // Head & Snout (Right side)
-    ctx.fillRect(x + 10, y + 4, 35, 12); // main head
-    ctx.fillRect(x + 45, y + 8, 10, 8);  // snout front
-    
-    // Body & Tail (Left side)
-    ctx.fillRect(x, y + 8, 12, 10);      // tail back
-    ctx.fillRect(x + 6, y + 10, 25, 14); // lower belly
-    
-    // Eye
-    ctx.fillStyle = theme.includes('light') ? '#f7f7f7' : '#000000';
-    if (theme === 'cyberpunk') ctx.fillStyle = '#05050a';
-    ctx.fillRect(x + 36, y + 6, 3, 3);
-    
-    // Running feet
-    ctx.fillStyle = themeColors.dino;
-    if (state === 'ducking_0') {
-      ctx.fillRect(x + 16, y + 24, 4, 4); // Left leg down
-      ctx.fillRect(x + 28, y + 24, 6, 2); // Right leg up
-    } else {
-      ctx.fillRect(x + 16, y + 24, 6, 2); // Left leg up
-      ctx.fillRect(x + 28, y + 24, 4, 4); // Right leg down
-    }
-  } else {
-    // Normal standing/jumping/running Dino
-    // Tail
-    ctx.fillRect(x, y + 16, 6, 12);
-    ctx.fillRect(x + 4, y + 14, 6, 16);
-    
-    // Body
-    ctx.fillRect(x + 8, y + 12, 22, 22);
-    
-    // Neck & Head
-    ctx.fillRect(x + 20, y, 16, 12);
-    ctx.fillRect(x + 20, y, 24, 16); // wider top head
-    
-    // Snout
-    ctx.fillRect(x + 36, y + 4, 8, 12);
-    
-    // Eye
-    ctx.fillStyle = theme.includes('light') ? '#f7f7f7' : '#000000';
-    if (theme === 'cyberpunk') ctx.fillStyle = '#05050a';
-    ctx.fillRect(x + 24, y + 4, 3, 3);
-    
-    // Reset back to main color for arms and legs
-    ctx.fillStyle = themeColors.dino;
-    
-    // Small Arm
-    ctx.fillRect(x + 32, y + 18, 6, 4);
-    ctx.fillRect(x + 36, y + 20, 4, 2);
-
-    // Legs
-    if (state === 'jumping' || state === 'crashed') {
-      ctx.fillRect(x + 12, y + 34, 4, 10);
-      ctx.fillRect(x + 12, y + 42, 6, 2);
-      ctx.fillRect(x + 24, y + 34, 4, 10);
-      ctx.fillRect(x + 24, y + 42, 6, 2);
-      
-      if (state === 'crashed') {
-        // Draw dramatic X eyes!
-        ctx.fillStyle = '#ff3333';
-        ctx.fillRect(x + 24, y + 4, 3, 3);
-      }
-    } else if (state === 'running_0') {
-      // Left leg down, Right leg bent
-      ctx.fillRect(x + 12, y + 34, 4, 14);
-      ctx.fillRect(x + 12, y + 46, 6, 2);
-      
-      ctx.fillRect(x + 24, y + 34, 4, 8);
-      ctx.fillRect(x + 28, y + 40, 4, 2);
-    } else if (state === 'running_1') {
-      // Left leg bent, Right leg down
-      ctx.fillRect(x + 12, y + 34, 4, 8);
-      ctx.fillRect(x + 8, y + 40, 4, 2);
-      
-      ctx.fillRect(x + 24, y + 34, 4, 14);
-      ctx.fillRect(x + 24, y + 46, 6, 2);
-    }
-  }
-
+  const bodyCol   = characterConfig.bodyColor || themeColors.dino;
+  const accentCol = characterConfig.accentColor
+    || (theme === 'cyberpunk' ? '#05050a' : theme.includes('light') ? '#f7f7f7' : '#000000');
+  _drawDinoWithSkin(ctx, x, y, w, h, state, bodyCol, accentCol);
   ctx.restore();
 }
 
@@ -737,6 +678,538 @@ function drawBirdSprite(ctx, x, y, w, h, flapFrame, theme) {
   }
 
   ctx.restore();
+}
+
+
+// ============================================================
+// --- CUSTOM CHARACTER SKINS ---
+// ============================================================
+
+function drawClassicDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 36, y + 6, 3, 3);
+    ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4);
+      ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2);
+      ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 24, y + 4, 3, 3);
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+      if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+  }
+}
+
+function drawRobotDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    // Panel seam lines
+    ctx.save();
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = accentCol; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 22, y + 4); ctx.lineTo(x + 22, y + 24);
+    ctx.moveTo(x + 34, y + 4); ctx.lineTo(x + 34, y + 24);
+    ctx.stroke(); ctx.restore();
+    // LED eye
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 35, y + 5, 4, 4);
+    ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4);
+      ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2);
+      ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    // Panel lines
+    ctx.save();
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = accentCol; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 8,  y + 22); ctx.lineTo(x + 30, y + 22);
+    ctx.moveTo(x + 20, y + 12); ctx.lineTo(x + 20, y + 34);
+    ctx.stroke(); ctx.restore();
+    // Antenna
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 28, y - 8, 2, 8);
+    ctx.fillRect(x + 25, y - 11, 8, 3);
+    // LED eye
+    ctx.fillRect(x + 23, y + 4, 5, 4);
+    ctx.fillStyle = bodyCol;
+    // Arm + claw
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    ctx.fillStyle = accentCol; ctx.fillRect(x + 38, y + 19, 2, 2); ctx.fillStyle = bodyCol;
+    // Legs
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+      if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+    // Joint indicators
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 11, y + 33, 6, 2);
+    ctx.fillRect(x + 23, y + 33, 6, 2);
+  }
+}
+
+function drawGhostDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.save();
+  ctx.globalAlpha = 0.62;
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    ctx.globalAlpha = 1; ctx.fillStyle = accentCol;
+    ctx.shadowBlur = 8; ctx.shadowColor = accentCol;
+    ctx.fillRect(x + 36, y + 6, 4, 4);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.62; ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4); ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2); ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    // Dashed outline
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = accentCol; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x + 8, y + 12, 22, 22);
+    ctx.strokeRect(x + 20, y, 24, 16);
+    ctx.setLineDash([]);
+    // Glowing eye
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = accentCol; ctx.shadowBlur = 10; ctx.shadowColor = accentCol;
+    ctx.fillRect(x + 23, y + 3, 5, 5);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.62; ctx.fillStyle = bodyCol;
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+  }
+  ctx.restore();
+}
+
+function drawNeonDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.save();
+  ctx.strokeStyle = bodyCol; ctx.lineWidth = 2;
+  ctx.shadowBlur = 14; ctx.shadowColor = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.strokeRect(x + 10, y + 4,  35, 12);
+    ctx.strokeRect(x + 45, y + 8,  10,  8);
+    ctx.strokeRect(x,      y + 8,  12, 10);
+    ctx.strokeRect(x + 6,  y + 10, 25, 14);
+    ctx.fillStyle = accentCol; ctx.shadowColor = accentCol; ctx.shadowBlur = 12;
+    ctx.fillRect(x + 35, y + 5, 5, 5);
+    ctx.shadowColor = bodyCol; ctx.shadowBlur = 14;
+    if (state === 'ducking_0') {
+      ctx.strokeRect(x + 16, y + 24, 4, 4); ctx.strokeRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.strokeRect(x + 16, y + 24, 6, 2); ctx.strokeRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.strokeRect(x,      y + 16,  6, 12);
+    ctx.strokeRect(x + 8,  y + 12, 22, 22);
+    ctx.strokeRect(x + 20, y,      24, 16);
+    ctx.strokeRect(x + 36, y + 4,   8, 12);
+    ctx.fillStyle = accentCol; ctx.shadowColor = accentCol; ctx.shadowBlur = 16;
+    ctx.fillRect(x + 22, y + 3, 6, 6);
+    ctx.shadowColor = bodyCol; ctx.shadowBlur = 14;
+    ctx.strokeRect(x + 32, y + 18, 6, 4);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.strokeRect(x + 12, y + 34, 4, 10);
+      ctx.strokeRect(x + 24, y + 34, 4, 10);
+    } else if (state === 'running_0') {
+      ctx.strokeRect(x + 12, y + 34, 4, 14);
+      ctx.strokeRect(x + 24, y + 34, 4,  8);
+    } else {
+      ctx.strokeRect(x + 12, y + 34, 4,  8);
+      ctx.strokeRect(x + 24, y + 34, 4, 14);
+    }
+  }
+  ctx.restore();
+}
+
+// Dispatches to the correct skin renderer
+function _drawDinoWithSkin(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  if (characterConfig.skin === 'custom_image' && characterConfig.customImage) {
+    ctx.drawImage(characterConfig.customImage, x, y, w, h);
+    if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    return;
+  }
+  ctx.fillStyle = bodyCol;
+  const sk = characterConfig.skin;
+  if      (sk === 'robot') drawRobotDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else if (sk === 'ghost') drawGhostDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else if (sk === 'neon')  drawNeonDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else                     drawClassicDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+}
+
+// ============================================================
+// --- CHARACTER CONFIG PERSISTENCE ---
+// ============================================================
+
+function loadCharacterConfig() {
+  try {
+    const saved = localStorage.getItem('dino_char_config');
+    if (!saved) return;
+    const p = JSON.parse(saved);
+    characterConfig.skin             = p.skin             || 'classic';
+    characterConfig.bodyColor        = p.bodyColor        || null;
+    characterConfig.accentColor      = p.accentColor      || null;
+    characterConfig.customImageDataUrl = p.customImageDataUrl || null;
+    if (characterConfig.customImageDataUrl) {
+      const img = new Image();
+      img.onload = () => { characterConfig.customImage = img; };
+      img.src    = characterConfig.customImageDataUrl;
+    }
+  } catch(e) { console.warn('[CharConfig] Load failed:', e); }
+}
+
+function saveCharacterConfig() {
+  try {
+    localStorage.setItem('dino_char_config', JSON.stringify({
+      skin:               characterConfig.skin,
+      bodyColor:          characterConfig.bodyColor,
+      accentColor:        characterConfig.accentColor,
+      customImageDataUrl: characterConfig.customImageDataUrl,
+    }));
+  } catch(e) { console.warn('[CharConfig] Save failed (storage full?):', e); }
+}
+
+function resizeImageFile(file, maxPx, callback) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      let sw = img.width, sh = img.height;
+      if (sw > maxPx || sh > maxPx) {
+        if (sw >= sh) { sh = Math.round(sh * maxPx / sw); sw = maxPx; }
+        else          { sw = Math.round(sw * maxPx / sh); sh = maxPx; }
+      }
+      const oc = document.createElement('canvas');
+      oc.width = sw; oc.height = sh;
+      oc.getContext('2d').drawImage(img, 0, 0, sw, sh);
+      callback(oc.toDataURL('image/png', 0.85));
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyUploadedImage(file) {
+  resizeImageFile(file, 200, (dataUrl) => {
+    characterConfig.customImageDataUrl = dataUrl;
+    characterConfig.skin = 'custom_image';
+    const img = new Image();
+    img.onload = () => {
+      characterConfig.customImage = img;
+      const previewImg = document.getElementById('upload-preview-img');
+      if (previewImg) previewImg.src = dataUrl;
+      document.getElementById('upload-preview-wrapper')?.classList.remove('hidden');
+      document.getElementById('upload-zone')?.classList.add('hidden');
+      document.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ============================================================
+// --- CHARACTER CUSTOMIZATION MODAL ---
+// ============================================================
+
+function initCustomizationModal() {
+  const modal      = document.getElementById('character-modal');
+  const openBtn    = document.getElementById('customize-btn');
+  const closeBtn   = document.getElementById('close-char-modal');
+  const applyBtn   = document.getElementById('apply-char-btn');
+  const resetBtn   = document.getElementById('reset-char-btn');
+  const backdrop   = modal.querySelector('.char-modal-backdrop');
+  const fileInput  = document.getElementById('image-upload-input');
+  const uploadZone = document.getElementById('upload-zone');
+
+  // --- OPEN ---
+  openBtn.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => modal.classList.add('char-modal--open'));
+    _syncModalToConfig();
+    _genSwatches('body-swatches',   CHAR_BODY_COLORS,   'body');
+    _genSwatches('accent-swatches', CHAR_ACCENT_COLORS, 'accent');
+    _startPreviewAnim();
+  });
+
+  // --- CLOSE ---
+  function closeModal() {
+    modal.classList.remove('char-modal--open');
+    setTimeout(() => modal.classList.add('hidden'), 320);
+    _stopPreviewAnim();
+  }
+  closeBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+
+  // --- TABS ---
+  modal.querySelectorAll('.char-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.char-tab').forEach(t => t.classList.remove('active'));
+      modal.querySelectorAll('.char-tab-content').forEach(tc => tc.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+  });
+
+  // --- SKIN CARDS ---
+  modal.querySelectorAll('.skin-card').forEach(card => {
+    card.addEventListener('click', () => {
+      modal.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      characterConfig.skin = card.dataset.skin;
+    });
+  });
+
+  // --- COLOR PICKERS ---
+  document.getElementById('body-color-picker').addEventListener('input', e => {
+    characterConfig.bodyColor = e.target.value;
+    document.querySelectorAll('#body-swatches .swatch:not(.swatch-custom)').forEach(s => s.classList.remove('active'));
+  });
+  document.getElementById('accent-color-picker').addEventListener('input', e => {
+    characterConfig.accentColor = e.target.value;
+    document.querySelectorAll('#accent-swatches .swatch:not(.swatch-custom)').forEach(s => s.classList.remove('active'));
+  });
+
+  // --- IMAGE UPLOAD ---
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) applyUploadedImage(f);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) applyUploadedImage(e.target.files[0]);
+  });
+
+  // --- REMOVE IMAGE ---
+  document.getElementById('remove-custom-image').addEventListener('click', () => {
+    characterConfig.customImage        = null;
+    characterConfig.customImageDataUrl = null;
+    if (characterConfig.skin === 'custom_image') characterConfig.skin = 'classic';
+    document.getElementById('upload-preview-wrapper').classList.add('hidden');
+    document.getElementById('upload-zone').classList.remove('hidden');
+    _syncModalToConfig();
+  });
+
+  // --- APPLY ---
+  applyBtn.addEventListener('click', () => {
+    saveCharacterConfig();
+    const orig = applyBtn.textContent;
+    applyBtn.textContent = '\u2713 Saved!';
+    applyBtn.disabled = true;
+    setTimeout(() => { applyBtn.textContent = orig; applyBtn.disabled = false; }, 1200);
+    closeModal();
+  });
+
+  // --- RESET ---
+  resetBtn.addEventListener('click', () => {
+    characterConfig = { skin: 'classic', bodyColor: null, accentColor: null, customImage: null, customImageDataUrl: null };
+    localStorage.removeItem('dino_char_config');
+    document.getElementById('upload-preview-wrapper').classList.add('hidden');
+    document.getElementById('upload-zone').classList.remove('hidden');
+    _syncModalToConfig();
+    _genSwatches('body-swatches',   CHAR_BODY_COLORS,   'body');
+    _genSwatches('accent-swatches', CHAR_ACCENT_COLORS, 'accent');
+  });
+}
+
+function _syncModalToConfig() {
+  document.querySelectorAll('.skin-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.skin === characterConfig.skin)
+  );
+  if (characterConfig.bodyColor)   document.getElementById('body-color-picker').value   = characterConfig.bodyColor;
+  if (characterConfig.accentColor) document.getElementById('accent-color-picker').value = characterConfig.accentColor;
+  document.querySelectorAll('.char-tab').forEach((t, i)          => t.classList.toggle('active', i === 0));
+  document.querySelectorAll('.char-tab-content').forEach((tc, i) => tc.classList.toggle('active', i === 0));
+  const hasImg = !!characterConfig.customImageDataUrl;
+  document.getElementById('upload-preview-wrapper').classList.toggle('hidden', !hasImg);
+  document.getElementById('upload-zone').classList.toggle('hidden', hasImg);
+  if (hasImg) document.getElementById('upload-preview-img').src = characterConfig.customImageDataUrl;
+}
+
+function _genSwatches(containerId, colors, type) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  const activeColor = type === 'body' ? characterConfig.bodyColor : characterConfig.accentColor;
+  colors.forEach(color => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = color;
+    if (activeColor === color) s.classList.add('active');
+    s.addEventListener('click', () => {
+      container.querySelectorAll('.swatch').forEach(sw => sw.classList.remove('active'));
+      s.classList.add('active');
+      if (type === 'body') {
+        characterConfig.bodyColor = color;
+        document.getElementById('body-color-picker').value = color;
+      } else {
+        characterConfig.accentColor = color;
+        document.getElementById('accent-color-picker').value = color;
+      }
+    });
+    container.appendChild(s);
+  });
+  // '+' custom picker swatch
+  const plus = document.createElement('div');
+  plus.className = 'swatch swatch-custom';
+  plus.textContent = '+';
+  plus.title = 'Pick custom color';
+  plus.addEventListener('click', () =>
+    document.getElementById(type === 'body' ? 'body-color-picker' : 'accent-color-picker').click()
+  );
+  container.appendChild(plus);
+}
+
+// --- PREVIEW ANIMATION LOOP ---
+
+function _startPreviewAnim() {
+  _stopPreviewAnim();
+  _previewLastTime = performance.now();
+  _previewRunFrame = 0; _previewRunTimer = 0;
+  (function loop(ts) {
+    const dt = Math.min((ts - _previewLastTime) / 1000, 0.05);
+    _previewLastTime = ts;
+    _previewRunTimer += dt;
+    if (_previewRunTimer > 0.1) { _previewRunFrame = (_previewRunFrame + 1) % 2; _previewRunTimer = 0; }
+    _drawPreviewCanvas();
+    _previewAnimId = requestAnimationFrame(loop);
+  })(performance.now());
+}
+
+function _stopPreviewAnim() {
+  if (_previewAnimId) { cancelAnimationFrame(_previewAnimId); _previewAnimId = null; }
+}
+
+function _drawPreviewCanvas() {
+  const canvas = document.getElementById('char-preview-canvas');
+  if (!canvas) return;
+  const pc = canvas.getContext('2d');
+  const pw = canvas.width, ph = canvas.height;
+  pc.clearRect(0, 0, pw, ph);
+
+  // Background
+  const bg = activeTheme === 'classic-light' ? '#efefef'
+           : activeTheme === 'classic-dark'  ? '#1c1c1e'
+           : activeTheme === 'cyberpunk'      ? '#05050a' : '#0e0625';
+  pc.fillStyle = bg;
+  pc.fillRect(0, 0, pw, ph);
+
+  // Subtle grid
+  pc.strokeStyle = activeTheme.includes('light') ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+  pc.lineWidth = 1;
+  for (let gx = 0; gx <= pw; gx += 20) { pc.beginPath(); pc.moveTo(gx,0); pc.lineTo(gx,ph); pc.stroke(); }
+  for (let gy = 0; gy <= ph; gy += 20) { pc.beginPath(); pc.moveTo(0,gy); pc.lineTo(pw,gy); pc.stroke(); }
+
+  // Ground line
+  const groundY = Math.round(ph * 0.78);
+  pc.strokeStyle = themeColors.ground; pc.lineWidth = 2;
+  pc.beginPath(); pc.moveTo(0, groundY); pc.lineTo(pw, groundY); pc.stroke();
+
+  // Dino
+  const dw = 44, dh = 48;
+  const dx = Math.round((pw - dw) / 2);
+  const dy = groundY - dh;
+  const bodyCol   = characterConfig.bodyColor   || themeColors.dino;
+  const accentCol = characterConfig.accentColor || (activeTheme.includes('light') ? '#f7f7f7' : '#000000');
+
+  pc.save();
+  if (activeTheme !== 'classic-light' && activeTheme !== 'classic-dark') {
+    pc.shadowBlur = 12; pc.shadowColor = bodyCol;
+  }
+  _drawDinoWithSkin(pc, dx, dy, dw, dh, `running_${_previewRunFrame}`, bodyCol, accentCol);
+  pc.restore();
+
+  // Running dust puffs
+  pc.globalAlpha = 0.25;
+  pc.fillStyle = themeColors.ground;
+  for (let d = 0; d < 3; d++) pc.fillRect(dx + 2 - d * 8, groundY, 5 - d, 2);
+  pc.globalAlpha = 1;
 }
 
 // --- POWER-UP FLOATING ENTITIES ---
