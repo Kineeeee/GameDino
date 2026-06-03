@@ -92,13 +92,27 @@ let characterConfig = {
   bodyColor: null,          // null = use theme default color
   accentColor: null,        // null = use theme default eye/accent color
   customImage: null,        // HTMLImageElement (restored from base64 at startup)
-  customImageDataUrl: null  // base64 string saved to localStorage
+  customImageDataUrl: null, // base64 string saved to localStorage
+  spriteSheet: {
+    enabled: false,
+    rows: 2,
+    cols: 4,
+    frameMap: {
+      running_0: 0,
+      running_1: 1,
+      jumping: 0,
+      ducking_0: 2,
+      ducking_1: 3,
+      crashed: 4
+    }
+  }
 };
 // Preview animation state (separate from game loop)
 let _previewAnimId   = null;
 let _previewRunFrame = 0;
 let _previewRunTimer = 0;
 let _previewLastTime = 0;
+let _previewStateOverride = null; // interactive preview state override
 // Color palette presets for swatches
 const CHAR_BODY_COLORS   = ['#535353','#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#6a0572','#1d3557','#ff006e','#00b4d8'];
 const CHAR_ACCENT_COLORS = ['#ffffff','#000000','#ffbe0b','#ff006e','#00f3ff','#06d6a0','#fb5607','#8338ec','#ff4d6d','#a8dadc'];
@@ -910,7 +924,25 @@ function drawNeonDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
 // Dispatches to the correct skin renderer
 function _drawDinoWithSkin(ctx, x, y, w, h, state, bodyCol, accentCol) {
   if (characterConfig.skin === 'custom_image' && characterConfig.customImage) {
-    ctx.drawImage(characterConfig.customImage, x, y, w, h);
+    const ss = characterConfig.spriteSheet;
+    if (ss && ss.enabled) {
+      const cellIndex = (ss.frameMap && ss.frameMap[state] !== undefined) ? ss.frameMap[state] : 0;
+      const cols = ss.cols || 4;
+      const rows = ss.rows || 2;
+      const cellWidth = characterConfig.customImage.width / cols;
+      const cellHeight = characterConfig.customImage.height / rows;
+      const colIndex = cellIndex % cols;
+      const rowIndex = Math.floor(cellIndex / cols);
+      const cellX = colIndex * cellWidth;
+      const cellY = rowIndex * cellHeight;
+      ctx.drawImage(
+        characterConfig.customImage,
+        cellX, cellY, cellWidth, cellHeight,
+        x, y, w, h
+      );
+    } else {
+      ctx.drawImage(characterConfig.customImage, x, y, w, h);
+    }
     if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
     return;
   }
@@ -940,6 +972,22 @@ function loadCharacterConfig() {
       img.onload = () => { characterConfig.customImage = img; };
       img.src    = characterConfig.customImageDataUrl;
     }
+    // Load spriteSheet settings if present, otherwise keep defaults
+    if (p.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: !!p.spriteSheet.enabled,
+        rows: parseInt(p.spriteSheet.rows, 10) || 2,
+        cols: parseInt(p.spriteSheet.cols, 10) || 4,
+        frameMap: {
+          running_0: p.spriteSheet.frameMap?.running_0 !== undefined ? parseInt(p.spriteSheet.frameMap.running_0, 10) : 0,
+          running_1: p.spriteSheet.frameMap?.running_1 !== undefined ? parseInt(p.spriteSheet.frameMap.running_1, 10) : 1,
+          jumping:   p.spriteSheet.frameMap?.jumping   !== undefined ? parseInt(p.spriteSheet.frameMap.jumping, 10)   : 0,
+          ducking_0: p.spriteSheet.frameMap?.ducking_0 !== undefined ? parseInt(p.spriteSheet.frameMap.ducking_0, 10) : 2,
+          ducking_1: p.spriteSheet.frameMap?.ducking_1 !== undefined ? parseInt(p.spriteSheet.frameMap.ducking_1, 10) : 3,
+          crashed:   p.spriteSheet.frameMap?.crashed   !== undefined ? parseInt(p.spriteSheet.frameMap.crashed, 10)   : 4
+        }
+      };
+    }
   } catch(e) { console.warn('[CharConfig] Load failed:', e); }
 }
 
@@ -950,6 +998,7 @@ function saveCharacterConfig() {
       bodyColor:          characterConfig.bodyColor,
       accentColor:        characterConfig.accentColor,
       customImageDataUrl: characterConfig.customImageDataUrl,
+      spriteSheet:        characterConfig.spriteSheet
     }));
   } catch(e) { console.warn('[CharConfig] Save failed (storage full?):', e); }
 }
@@ -975,17 +1024,37 @@ function resizeImageFile(file, maxPx, callback) {
 }
 
 function applyUploadedImage(file) {
-  resizeImageFile(file, 200, (dataUrl) => {
+  resizeImageFile(file, 400, (dataUrl) => {
     characterConfig.customImageDataUrl = dataUrl;
     characterConfig.skin = 'custom_image';
+    if (!characterConfig.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: {
+          running_0: 0,
+          running_1: 1,
+          jumping: 0,
+          ducking_0: 2,
+          ducking_1: 3,
+          crashed: 4
+        }
+      };
+    }
     const img = new Image();
     img.onload = () => {
       characterConfig.customImage = img;
       const previewImg = document.getElementById('upload-preview-img');
+      const previewImgFallback = document.getElementById('upload-preview-img-fallback');
       if (previewImg) previewImg.src = dataUrl;
+      if (previewImgFallback) previewImgFallback.src = dataUrl;
+      
       document.getElementById('upload-preview-wrapper')?.classList.remove('hidden');
       document.getElementById('upload-zone')?.classList.add('hidden');
       document.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+      
+      _syncModalToConfig();
     };
     img.src = dataUrl;
   });
@@ -1088,13 +1157,125 @@ function initCustomizationModal() {
 
   // --- RESET ---
   resetBtn.addEventListener('click', () => {
-    characterConfig = { skin: 'classic', bodyColor: null, accentColor: null, customImage: null, customImageDataUrl: null };
+    characterConfig = {
+      skin: 'classic',
+      bodyColor: null,
+      accentColor: null,
+      customImage: null,
+      customImageDataUrl: null,
+      spriteSheet: {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: {
+          running_0: 0,
+          running_1: 1,
+          jumping: 0,
+          ducking_0: 2,
+          ducking_1: 3,
+          crashed: 4
+        }
+      }
+    };
     localStorage.removeItem('dino_char_config');
     document.getElementById('upload-preview-wrapper').classList.add('hidden');
     document.getElementById('upload-zone').classList.remove('hidden');
     _syncModalToConfig();
     _genSwatches('body-swatches',   CHAR_BODY_COLORS,   'body');
     _genSwatches('accent-swatches', CHAR_ACCENT_COLORS, 'accent');
+  });
+
+  // --- SPRITE SHEET EDITOR UI LISTENERS ---
+  const enableCheckbox = document.getElementById('spritesheet-enable');
+  const rowsInput = document.getElementById('spritesheet-rows');
+  const colsInput = document.getElementById('spritesheet-cols');
+
+  enableCheckbox.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    if (!characterConfig.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+      };
+    }
+    characterConfig.spriteSheet.enabled = enabled;
+    document.getElementById('spritesheet-options').classList.toggle('hidden', !enabled);
+    document.getElementById('spritesheet-disabled-preview').classList.toggle('hidden', enabled);
+    document.querySelector('.char-modal-panel').classList.toggle('expanded', enabled);
+
+    if (enabled) {
+      _updateVisualGridOverlay();
+      characterConfig.skin = 'custom_image';
+      document.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+    }
+  });
+
+  const handleDimensionChange = () => {
+    let rowsVal = parseInt(rowsInput.value, 10);
+    if (isNaN(rowsVal) || rowsVal < 1) rowsVal = 1;
+    if (rowsVal > 10) rowsVal = 10;
+    rowsInput.value = rowsVal;
+
+    let colsVal = parseInt(colsInput.value, 10);
+    if (isNaN(colsVal) || colsVal < 1) colsVal = 1;
+    if (colsVal > 10) colsVal = 10;
+    colsInput.value = colsVal;
+
+    _updateVisualGridOverlay();
+    _updateFrameMapFromUI();
+  };
+
+  rowsInput.addEventListener('change', handleDimensionChange);
+  colsInput.addEventListener('change', handleDimensionChange);
+
+  const _updateFrameMapFromUI = () => {
+    if (!characterConfig.spriteSheet) return;
+    characterConfig.spriteSheet.frameMap = {
+      running_0: parseInt(document.getElementById('map-run-0').value, 10) || 0,
+      running_1: parseInt(document.getElementById('map-run-1').value, 10) || 0,
+      jumping:   parseInt(document.getElementById('map-jump').value, 10) || 0,
+      ducking_0: parseInt(document.getElementById('map-duck-0').value, 10) || 0,
+      ducking_1: parseInt(document.getElementById('map-duck-1').value, 10) || 0,
+      crashed:   parseInt(document.getElementById('map-crash').value, 10) || 0
+    };
+  };
+
+  const selects = ['map-run-0', 'map-run-1', 'map-jump', 'map-duck-0', 'map-duck-1', 'map-crash'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', _updateFrameMapFromUI);
+      // Interactive preview override on focus
+      el.addEventListener('focus', () => {
+        if (id === 'map-run-0') _previewStateOverride = 'running_0';
+        else if (id === 'map-run-1') _previewStateOverride = 'running_1';
+        else if (id === 'map-jump') _previewStateOverride = 'jumping';
+        else if (id === 'map-duck-0') _previewStateOverride = 'ducking_0';
+        else if (id === 'map-duck-1') _previewStateOverride = 'ducking_1';
+        else if (id === 'map-crash') _previewStateOverride = 'crashed';
+      });
+      el.addEventListener('blur', () => {
+        _previewStateOverride = null;
+      });
+
+      // Hover preview override on parent map-row element
+      const row = el.closest('.map-row');
+      if (row) {
+        row.addEventListener('mouseenter', () => {
+          if (id === 'map-run-0') _previewStateOverride = 'running_0';
+          else if (id === 'map-run-1') _previewStateOverride = 'running_1';
+          else if (id === 'map-jump') _previewStateOverride = 'jumping';
+          else if (id === 'map-duck-0') _previewStateOverride = 'ducking_0';
+          else if (id === 'map-duck-1') _previewStateOverride = 'ducking_1';
+          else if (id === 'map-crash') _previewStateOverride = 'crashed';
+        });
+        row.addEventListener('mouseleave', () => {
+          _previewStateOverride = null;
+        });
+      }
+    }
   });
 }
 
@@ -1104,12 +1285,117 @@ function _syncModalToConfig() {
   );
   if (characterConfig.bodyColor)   document.getElementById('body-color-picker').value   = characterConfig.bodyColor;
   if (characterConfig.accentColor) document.getElementById('accent-color-picker').value = characterConfig.accentColor;
-  document.querySelectorAll('.char-tab').forEach((t, i)          => t.classList.toggle('active', i === 0));
-  document.querySelectorAll('.char-tab-content').forEach((tc, i) => tc.classList.toggle('active', i === 0));
+  
+  const activeTabIndex = characterConfig.skin === 'custom_image' ? 2 : 0;
+  document.querySelectorAll('.char-tab').forEach((t, i)          => t.classList.toggle('active', i === activeTabIndex));
+  document.querySelectorAll('.char-tab-content').forEach((tc, i) => tc.classList.toggle('active', i === activeTabIndex));
+  
   const hasImg = !!characterConfig.customImageDataUrl;
   document.getElementById('upload-preview-wrapper').classList.toggle('hidden', !hasImg);
   document.getElementById('upload-zone').classList.toggle('hidden', hasImg);
-  if (hasImg) document.getElementById('upload-preview-img').src = characterConfig.customImageDataUrl;
+  
+  if (hasImg) {
+    const dataUrl = characterConfig.customImageDataUrl;
+    document.getElementById('upload-preview-img').src = dataUrl;
+    document.getElementById('upload-preview-img-fallback').src = dataUrl;
+    
+    const ss = characterConfig.spriteSheet || {
+      enabled: false,
+      rows: 2,
+      cols: 4,
+      frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+    };
+    
+    const enableCheckbox = document.getElementById('spritesheet-enable');
+    enableCheckbox.checked = ss.enabled;
+    
+    document.getElementById('spritesheet-options').classList.toggle('hidden', !ss.enabled);
+    document.getElementById('spritesheet-disabled-preview').classList.toggle('hidden', ss.enabled);
+    document.querySelector('.char-modal-panel').classList.toggle('expanded', ss.enabled);
+    
+    document.getElementById('spritesheet-rows').value = ss.rows;
+    document.getElementById('spritesheet-cols').value = ss.cols;
+    
+    _updateVisualGridOverlay();
+    
+    if (ss.frameMap) {
+      document.getElementById('map-run-0').value = ss.frameMap.running_0 ?? 0;
+      document.getElementById('map-run-1').value = ss.frameMap.running_1 ?? 1;
+      document.getElementById('map-jump').value = ss.frameMap.jumping ?? 0;
+      document.getElementById('map-duck-0').value = ss.frameMap.ducking_0 ?? 2;
+      document.getElementById('map-duck-1').value = ss.frameMap.ducking_1 ?? 3;
+      document.getElementById('map-crash').value = ss.frameMap.crashed ?? 4;
+    }
+  } else {
+    document.getElementById('spritesheet-enable').checked = false;
+    document.getElementById('spritesheet-options').classList.add('hidden');
+    document.getElementById('spritesheet-disabled-preview').classList.remove('hidden');
+    document.querySelector('.char-modal-panel').classList.remove('expanded');
+  }
+}
+
+function _updateVisualGridOverlay() {
+  const rowsInput = document.getElementById('spritesheet-rows');
+  const colsInput = document.getElementById('spritesheet-cols');
+  
+  let rows = Math.max(1, Math.min(10, parseInt(rowsInput.value, 10) || 1));
+  let cols = Math.max(1, Math.min(10, parseInt(colsInput.value, 10) || 1));
+  
+  if (!characterConfig.spriteSheet) {
+    characterConfig.spriteSheet = {
+      enabled: false,
+      rows: 2,
+      cols: 4,
+      frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+    };
+  }
+  characterConfig.spriteSheet.rows = rows;
+  characterConfig.spriteSheet.cols = cols;
+  
+  const totalCells = rows * cols;
+  const overlay = document.getElementById('grid-overlay');
+  if (overlay) {
+    overlay.style.setProperty('--rows', rows);
+    overlay.style.setProperty('--cols', cols);
+    overlay.innerHTML = '';
+    for (let i = 0; i < totalCells; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell-label';
+      cell.textContent = i;
+      overlay.appendChild(cell);
+    }
+  }
+  
+  const selects = [
+    document.getElementById('map-run-0'),
+    document.getElementById('map-run-1'),
+    document.getElementById('map-jump'),
+    document.getElementById('map-duck-0'),
+    document.getElementById('map-duck-1'),
+    document.getElementById('map-crash')
+  ];
+  
+  selects.forEach(sel => {
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '';
+    for (let i = 0; i < totalCells; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `Cell ${i}`;
+      sel.appendChild(opt);
+    }
+    if (currentVal !== "" && parseInt(currentVal, 10) < totalCells) {
+      sel.value = currentVal;
+    } else {
+      if (sel.id === 'map-run-0') sel.value = 0;
+      else if (sel.id === 'map-run-1') sel.value = Math.min(1, totalCells - 1);
+      else if (sel.id === 'map-jump') sel.value = 0;
+      else if (sel.id === 'map-duck-0') sel.value = Math.min(2, totalCells - 1);
+      else if (sel.id === 'map-duck-1') sel.value = Math.min(3, totalCells - 1);
+      else if (sel.id === 'map-crash') sel.value = Math.min(4, totalCells - 1);
+    }
+  });
 }
 
 function _genSwatches(containerId, colors, type) {
@@ -1191,8 +1477,18 @@ function _drawPreviewCanvas() {
   pc.strokeStyle = themeColors.ground; pc.lineWidth = 2;
   pc.beginPath(); pc.moveTo(0, groundY); pc.lineTo(pw, groundY); pc.stroke();
 
-  // Dino
-  const dw = 44, dh = 48;
+  // Determine state & dimensions
+  let previewState = `running_${_previewRunFrame}`;
+  if (_previewStateOverride) {
+    previewState = _previewStateOverride;
+  }
+
+  let dw = 44, dh = 48;
+  if (previewState.startsWith('ducking')) {
+    dw = 55;
+    dh = 28;
+  }
+
   const dx = Math.round((pw - dw) / 2);
   const dy = groundY - dh;
   const bodyCol   = characterConfig.bodyColor   || themeColors.dino;
@@ -1202,14 +1498,16 @@ function _drawPreviewCanvas() {
   if (activeTheme !== 'classic-light' && activeTheme !== 'classic-dark') {
     pc.shadowBlur = 12; pc.shadowColor = bodyCol;
   }
-  _drawDinoWithSkin(pc, dx, dy, dw, dh, `running_${_previewRunFrame}`, bodyCol, accentCol);
+  _drawDinoWithSkin(pc, dx, dy, dw, dh, previewState, bodyCol, accentCol);
   pc.restore();
 
-  // Running dust puffs
-  pc.globalAlpha = 0.25;
-  pc.fillStyle = themeColors.ground;
-  for (let d = 0; d < 3; d++) pc.fillRect(dx + 2 - d * 8, groundY, 5 - d, 2);
-  pc.globalAlpha = 1;
+  // Running dust puffs (only show if running)
+  if (previewState.startsWith('running')) {
+    pc.globalAlpha = 0.25;
+    pc.fillStyle = themeColors.ground;
+    for (let d = 0; d < 3; d++) pc.fillRect(dx + 2 - d * 8, groundY, 5 - d, 2);
+    pc.globalAlpha = 1;
+  }
 }
 
 // --- POWER-UP FLOATING ENTITIES ---

@@ -249,7 +249,75 @@
             </div>
           </div>
           <div id="upload-preview-wrapper" class="upload-preview-wrapper hidden">
-            <img id="upload-preview-img" class="upload-preview-img" alt="Custom skin preview">
+            <!-- Normal non-spritesheet preview fallback -->
+            <div id="spritesheet-disabled-preview" class="spritesheet-disabled-preview">
+              <img id="upload-preview-img-fallback" class="upload-preview-img" alt="Custom skin preview">
+            </div>
+
+            <!-- Checkbox toggle to use as animated sprite sheet -->
+            <div class="spritesheet-toggle-container">
+              <label for="spritesheet-enable" class="checkbox-label">
+                <input type="checkbox" id="spritesheet-enable">
+                Use as animated sprite sheet
+              </label>
+            </div>
+            
+            <div id="spritesheet-options" class="spritesheet-options hidden">
+              <!-- Row/Col inputs -->
+              <div class="spritesheet-dimensions">
+                <div class="control-group">
+                  <label for="spritesheet-rows" class="control-label">Rows</label>
+                  <input type="number" id="spritesheet-rows" class="num-input" min="1" max="10" value="2">
+                </div>
+                <div class="control-group">
+                  <label for="spritesheet-cols" class="control-label">Cols</label>
+                  <input type="number" id="spritesheet-cols" class="num-input" min="1" max="10" value="4">
+                </div>
+              </div>
+              
+              <!-- Split Layout: Grid Preview & Mappings -->
+              <div class="editor-main-layout">
+                <!-- Left: Grid overlay preview -->
+                <div class="grid-preview-container">
+                  <div class="image-overlay-container">
+                    <img id="upload-preview-img" class="upload-preview-img" alt="Custom skin preview">
+                    <div id="grid-overlay" class="grid-overlay"></div>
+                  </div>
+                </div>
+                
+                <!-- Right: Dropdowns -->
+                <div class="mapping-container">
+                  <p class="mapping-title">Frame Mappings</p>
+                  <div class="mapping-grid">
+                    <div class="map-row">
+                      <label for="map-run-0">Running 1</label>
+                      <select id="map-run-0" class="map-select"></select>
+                    </div>
+                    <div class="map-row">
+                      <label for="map-run-1">Running 2</label>
+                      <select id="map-run-1" class="map-select"></select>
+                    </div>
+                    <div class="map-row">
+                      <label for="map-jump">Jumping</label>
+                      <select id="map-jump" class="map-select"></select>
+                    </div>
+                    <div class="map-row">
+                      <label for="map-duck-0">Ducking 1</label>
+                      <select id="map-duck-0" class="map-select"></select>
+                    </div>
+                    <div class="map-row">
+                      <label for="map-duck-1">Ducking 2</label>
+                      <select id="map-duck-1" class="map-select"></select>
+                    </div>
+                    <div class="map-row">
+                      <label for="map-crash">Crashed</label>
+                      <select id="map-crash" class="map-select"></select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             <button id="remove-custom-image" class="remove-img-btn">&#x2715; Remove</button>
           </div>
         </div>
