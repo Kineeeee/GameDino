@@ -36,13 +36,17 @@ const powerupProgress = document.getElementById('powerup-progress');
 
 const mobileDuckBtn = document.getElementById('mobile-duck');
 const mobileJumpBtn = document.getElementById('mobile-jump');
+const hudAmmoBox = document.getElementById('hud-ammo-box');
+const ammoCounter = document.getElementById('ammo-counter');
+const mobileShootBtn = document.getElementById('mobile-shoot');
 
 // --- GAME CONSTANTS & STATE ---
 const GAME_STATE = {
   MENU: 'menu',
   PLAYING: 'playing',
   PAUSED: 'paused',
-  GAMEOVER: 'gameover'
+  GAMEOVER: 'gameover',
+  CRASHED: 'crashed'
 };
 
 const POWERUP_TYPE = {
@@ -75,16 +79,52 @@ let lastTime = 0; // for delta time calculation
 let screenShake = 0; // screenshake magnitude
 let nextObstacleTimer = 0;
 let nextPowerUpTimer = 0;
+let nextAmmoTimer = 0;
+let crashTimeoutId = null;
 
 // Entities collections
 let dino = null;
 let obstacles = [];
 let powerups = [];
+let projectiles = [];
+let ammoPickups = [];
+let ammo = 0;
 let particles = [];
 let clouds = [];
 let stars = []; // for synthwave/cyberpunk night sky
 let terrainFeatures = []; // background mountains/structures
 let groundGridOffset = 0;
+
+// --- CHARACTER CUSTOMIZATION STATE ---
+let characterConfig = {
+  skin: 'classic',          // 'classic' | 'robot' | 'ghost' | 'neon' | 'custom_image'
+  bodyColor: null,          // null = use theme default color
+  accentColor: null,        // null = use theme default eye/accent color
+  customImage: null,        // HTMLImageElement (restored from base64 at startup)
+  customImageDataUrl: null, // base64 string saved to localStorage
+  spriteSheet: {
+    enabled: false,
+    rows: 2,
+    cols: 4,
+    frameMap: {
+      running_0: 0,
+      running_1: 1,
+      jumping: 0,
+      ducking_0: 2,
+      ducking_1: 3,
+      crashed: 4
+    }
+  }
+};
+// Preview animation state (separate from game loop)
+let _previewAnimId   = null;
+let _previewRunFrame = 0;
+let _previewRunTimer = 0;
+let _previewLastTime = 0;
+let _previewStateOverride = null; // interactive preview state override
+// Color palette presets for swatches
+const CHAR_BODY_COLORS   = ['#535353','#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#6a0572','#1d3557','#ff006e','#00b4d8'];
+const CHAR_ACCENT_COLORS = ['#ffffff','#000000','#ffbe0b','#ff006e','#00f3ff','#06d6a0','#fb5607','#8338ec','#ff4d6d','#a8dadc'];
 
 // Theme configuration palette values used in Canvas drawing
 let themeColors = {
@@ -108,10 +148,14 @@ function init() {
   applyTheme(themeSelect.value);
   applySoundUI();
   
+  // Load saved character customization from localStorage
+  loadCharacterConfig();
+  
   // Create static background elements once
   generateBackgrounds();
   
   // Game Loop
+  initCustomizationModal();
   requestAnimationFrame(gameLoop);
 }
 
@@ -448,91 +492,11 @@ class DinoCharacter {
 
 // --- DINO RENDER PROCEDURES ---
 function drawDinoSprite(ctx, x, y, w, h, state, theme) {
-  // Let's render Dino using elegant shapes representing Chrome Dino.
-  // In classic mode, it is pure black/white flat vector. In Synth/Cyberpunk, it is styled with matching neon glow.
   ctx.save();
-  
-  if (state.startsWith('ducking')) {
-    // Squished ducking Dino!
-    // Head & Snout (Right side)
-    ctx.fillRect(x + 10, y + 4, 35, 12); // main head
-    ctx.fillRect(x + 45, y + 8, 10, 8);  // snout front
-    
-    // Body & Tail (Left side)
-    ctx.fillRect(x, y + 8, 12, 10);      // tail back
-    ctx.fillRect(x + 6, y + 10, 25, 14); // lower belly
-    
-    // Eye
-    ctx.fillStyle = theme.includes('light') ? '#f7f7f7' : '#000000';
-    if (theme === 'cyberpunk') ctx.fillStyle = '#05050a';
-    ctx.fillRect(x + 36, y + 6, 3, 3);
-    
-    // Running feet
-    ctx.fillStyle = themeColors.dino;
-    if (state === 'ducking_0') {
-      ctx.fillRect(x + 16, y + 24, 4, 4); // Left leg down
-      ctx.fillRect(x + 28, y + 24, 6, 2); // Right leg up
-    } else {
-      ctx.fillRect(x + 16, y + 24, 6, 2); // Left leg up
-      ctx.fillRect(x + 28, y + 24, 4, 4); // Right leg down
-    }
-  } else {
-    // Normal standing/jumping/running Dino
-    // Tail
-    ctx.fillRect(x, y + 16, 6, 12);
-    ctx.fillRect(x + 4, y + 14, 6, 16);
-    
-    // Body
-    ctx.fillRect(x + 8, y + 12, 22, 22);
-    
-    // Neck & Head
-    ctx.fillRect(x + 20, y, 16, 12);
-    ctx.fillRect(x + 20, y, 24, 16); // wider top head
-    
-    // Snout
-    ctx.fillRect(x + 36, y + 4, 8, 12);
-    
-    // Eye
-    ctx.fillStyle = theme.includes('light') ? '#f7f7f7' : '#000000';
-    if (theme === 'cyberpunk') ctx.fillStyle = '#05050a';
-    ctx.fillRect(x + 24, y + 4, 3, 3);
-    
-    // Reset back to main color for arms and legs
-    ctx.fillStyle = themeColors.dino;
-    
-    // Small Arm
-    ctx.fillRect(x + 32, y + 18, 6, 4);
-    ctx.fillRect(x + 36, y + 20, 4, 2);
-
-    // Legs
-    if (state === 'jumping' || state === 'crashed') {
-      ctx.fillRect(x + 12, y + 34, 4, 10);
-      ctx.fillRect(x + 12, y + 42, 6, 2);
-      ctx.fillRect(x + 24, y + 34, 4, 10);
-      ctx.fillRect(x + 24, y + 42, 6, 2);
-      
-      if (state === 'crashed') {
-        // Draw dramatic X eyes!
-        ctx.fillStyle = '#ff3333';
-        ctx.fillRect(x + 24, y + 4, 3, 3);
-      }
-    } else if (state === 'running_0') {
-      // Left leg down, Right leg bent
-      ctx.fillRect(x + 12, y + 34, 4, 14);
-      ctx.fillRect(x + 12, y + 46, 6, 2);
-      
-      ctx.fillRect(x + 24, y + 34, 4, 8);
-      ctx.fillRect(x + 28, y + 40, 4, 2);
-    } else if (state === 'running_1') {
-      // Left leg bent, Right leg down
-      ctx.fillRect(x + 12, y + 34, 4, 8);
-      ctx.fillRect(x + 8, y + 40, 4, 2);
-      
-      ctx.fillRect(x + 24, y + 34, 4, 14);
-      ctx.fillRect(x + 24, y + 46, 6, 2);
-    }
-  }
-
+  const bodyCol   = characterConfig.bodyColor || themeColors.dino;
+  const accentCol = characterConfig.accentColor
+    || (theme === 'cyberpunk' ? '#05050a' : theme.includes('light') ? '#f7f7f7' : '#000000');
+  _drawDinoWithSkin(ctx, x, y, w, h, state, bodyCol, accentCol);
   ctx.restore();
 }
 
@@ -633,12 +597,20 @@ class Obstacle {
     
     ctx.fillStyle = themeColors.obstacle;
 
-    if (this.isCactus) {
-      // Programmatic pixel-cactus render
-      drawCactusSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+    if (activeTheme === 'space-nebula') {
+      if (this.isCactus) {
+        drawSpaceCrystalSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+      } else {
+        drawUFOSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame);
+      }
     } else {
-      // Flapping bird render
-      drawBirdSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame, activeTheme);
+      if (this.isCactus) {
+        // Programmatic pixel-cactus render
+        drawCactusSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+      } else {
+        // Flapping bird render
+        drawBirdSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame, activeTheme);
+      }
     }
 
     ctx.restore();
@@ -737,6 +709,900 @@ function drawBirdSprite(ctx, x, y, w, h, flapFrame, theme) {
   }
 
   ctx.restore();
+}
+
+function drawSpaceCrystalSprite(ctx, x, y, w, h, type) {
+  ctx.save();
+  ctx.fillStyle = themeColors.obstacle;
+  
+  if (type === 'cactus_s' || type === 'cactus_l') {
+    drawCrystalShard(ctx, x, y, w, h, 'rgba(255, 255, 255, 0.45)');
+  } else if (type === 'cactus_double') {
+    drawCrystalShard(ctx, x, y + h * 0.2, w * 0.45, h * 0.8, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.48, y, w * 0.52, h, 'rgba(255, 255, 255, 0.45)');
+  } else if (type === 'cactus_triple') {
+    drawCrystalShard(ctx, x, y + h * 0.25, w * 0.3, h * 0.75, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.28, y, w * 0.42, h, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.68, y + h * 0.15, w * 0.32, h * 0.85, 'rgba(255, 255, 255, 0.45)');
+  }
+  ctx.restore();
+}
+
+function drawCrystalShard(ctx, x, y, w, h, colorAccent) {
+  ctx.save();
+  // Outer outline
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y);
+  ctx.lineTo(x + w, y + h * 0.7);
+  ctx.lineTo(x + w * 0.7, y + h);
+  ctx.lineTo(x + w * 0.3, y + h);
+  ctx.lineTo(x, y + h * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Left side facet shadow reflection
+  ctx.fillStyle = colorAccent;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y);
+  ctx.lineTo(x + w * 0.5, y + h);
+  ctx.lineTo(x + w * 0.3, y + h);
+  ctx.lineTo(x, y + h * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawUFOSprite(ctx, x, y, w, h, flapFrame) {
+  ctx.save();
+  
+  // Cockpit glass dome (glowing cyan)
+  ctx.fillStyle = '#00ffff';
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y + h * 0.38, w * 0.22, Math.PI, 0);
+  ctx.fill();
+  
+  // Main metal body
+  ctx.fillStyle = themeColors.obstacle;
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h * 0.58, w * 0.5, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Blinking neon rim lights
+  ctx.fillStyle = flapFrame === 0 ? '#00ffff' : '#ff007f';
+  ctx.beginPath();
+  ctx.arc(x + w * 0.24, y + h * 0.58, 2.5, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.5, y + h * 0.63, 2.5, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.76, y + h * 0.58, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Faint glowing tractor beam cone
+  ctx.fillStyle = 'rgba(0, 255, 255, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.35, y + h * 0.78);
+  ctx.lineTo(x + w * 0.65, y + h * 0.78);
+  ctx.lineTo(x + w * 0.8, y + h * 1.3);
+  ctx.lineTo(x + w * 0.2, y + h * 1.3);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+
+// ============================================================
+// --- CUSTOM CHARACTER SKINS ---
+// ============================================================
+
+function drawClassicDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 36, y + 6, 3, 3);
+    ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4);
+      ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2);
+      ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 24, y + 4, 3, 3);
+    ctx.fillStyle = bodyCol;
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+      if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+  }
+}
+
+function drawRobotDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    // Panel seam lines
+    ctx.save();
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = accentCol; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 22, y + 4); ctx.lineTo(x + 22, y + 24);
+    ctx.moveTo(x + 34, y + 4); ctx.lineTo(x + 34, y + 24);
+    ctx.stroke(); ctx.restore();
+    // LED eye
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 35, y + 5, 4, 4);
+    ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4);
+      ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2);
+      ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    // Panel lines
+    ctx.save();
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = accentCol; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 8,  y + 22); ctx.lineTo(x + 30, y + 22);
+    ctx.moveTo(x + 20, y + 12); ctx.lineTo(x + 20, y + 34);
+    ctx.stroke(); ctx.restore();
+    // Antenna
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 28, y - 8, 2, 8);
+    ctx.fillRect(x + 25, y - 11, 8, 3);
+    // LED eye
+    ctx.fillRect(x + 23, y + 4, 5, 4);
+    ctx.fillStyle = bodyCol;
+    // Arm + claw
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    ctx.fillStyle = accentCol; ctx.fillRect(x + 38, y + 19, 2, 2); ctx.fillStyle = bodyCol;
+    // Legs
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+      if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+    // Joint indicators
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(x + 11, y + 33, 6, 2);
+    ctx.fillRect(x + 23, y + 33, 6, 2);
+  }
+}
+
+function drawGhostDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.save();
+  ctx.globalAlpha = 0.62;
+  ctx.fillStyle = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.fillRect(x + 10, y + 4,  35, 12);
+    ctx.fillRect(x + 45, y + 8,  10,  8);
+    ctx.fillRect(x,      y + 8,  12, 10);
+    ctx.fillRect(x + 6,  y + 10, 25, 14);
+    ctx.globalAlpha = 1; ctx.fillStyle = accentCol;
+    ctx.shadowBlur = 8; ctx.shadowColor = accentCol;
+    ctx.fillRect(x + 36, y + 6, 4, 4);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.62; ctx.fillStyle = bodyCol;
+    if (state === 'ducking_0') {
+      ctx.fillRect(x + 16, y + 24, 4, 4); ctx.fillRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.fillRect(x + 16, y + 24, 6, 2); ctx.fillRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.fillRect(x,      y + 16,  6, 12);
+    ctx.fillRect(x + 4,  y + 14,  6, 16);
+    ctx.fillRect(x + 8,  y + 12, 22, 22);
+    ctx.fillRect(x + 20, y,      16, 12);
+    ctx.fillRect(x + 20, y,      24, 16);
+    ctx.fillRect(x + 36, y + 4,   8, 12);
+    // Dashed outline
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = accentCol; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ctx.strokeRect(x + 8, y + 12, 22, 22);
+    ctx.strokeRect(x + 20, y, 24, 16);
+    ctx.setLineDash([]);
+    // Glowing eye
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = accentCol; ctx.shadowBlur = 10; ctx.shadowColor = accentCol;
+    ctx.fillRect(x + 23, y + 3, 5, 5);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 0.62; ctx.fillStyle = bodyCol;
+    ctx.fillRect(x + 32, y + 18, 6, 4);
+    ctx.fillRect(x + 36, y + 20, 4, 2);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.fillRect(x + 12, y + 34, 4, 10);
+      ctx.fillRect(x + 12, y + 42, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 10);
+      ctx.fillRect(x + 24, y + 42, 6,  2);
+    } else if (state === 'running_0') {
+      ctx.fillRect(x + 12, y + 34, 4, 14);
+      ctx.fillRect(x + 12, y + 46, 6,  2);
+      ctx.fillRect(x + 24, y + 34, 4,  8);
+      ctx.fillRect(x + 28, y + 40, 4,  2);
+    } else {
+      ctx.fillRect(x + 12, y + 34, 4,  8);
+      ctx.fillRect(x +  8, y + 40, 4,  2);
+      ctx.fillRect(x + 24, y + 34, 4, 14);
+      ctx.fillRect(x + 24, y + 46, 6,  2);
+    }
+  }
+  ctx.restore();
+}
+
+function drawNeonDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  ctx.save();
+  ctx.strokeStyle = bodyCol; ctx.lineWidth = 2;
+  ctx.shadowBlur = 14; ctx.shadowColor = bodyCol;
+  if (state.startsWith('ducking')) {
+    ctx.strokeRect(x + 10, y + 4,  35, 12);
+    ctx.strokeRect(x + 45, y + 8,  10,  8);
+    ctx.strokeRect(x,      y + 8,  12, 10);
+    ctx.strokeRect(x + 6,  y + 10, 25, 14);
+    ctx.fillStyle = accentCol; ctx.shadowColor = accentCol; ctx.shadowBlur = 12;
+    ctx.fillRect(x + 35, y + 5, 5, 5);
+    ctx.shadowColor = bodyCol; ctx.shadowBlur = 14;
+    if (state === 'ducking_0') {
+      ctx.strokeRect(x + 16, y + 24, 4, 4); ctx.strokeRect(x + 28, y + 24, 6, 2);
+    } else {
+      ctx.strokeRect(x + 16, y + 24, 6, 2); ctx.strokeRect(x + 28, y + 24, 4, 4);
+    }
+  } else {
+    ctx.strokeRect(x,      y + 16,  6, 12);
+    ctx.strokeRect(x + 8,  y + 12, 22, 22);
+    ctx.strokeRect(x + 20, y,      24, 16);
+    ctx.strokeRect(x + 36, y + 4,   8, 12);
+    ctx.fillStyle = accentCol; ctx.shadowColor = accentCol; ctx.shadowBlur = 16;
+    ctx.fillRect(x + 22, y + 3, 6, 6);
+    ctx.shadowColor = bodyCol; ctx.shadowBlur = 14;
+    ctx.strokeRect(x + 32, y + 18, 6, 4);
+    if (state === 'jumping' || state === 'crashed') {
+      ctx.strokeRect(x + 12, y + 34, 4, 10);
+      ctx.strokeRect(x + 24, y + 34, 4, 10);
+    } else if (state === 'running_0') {
+      ctx.strokeRect(x + 12, y + 34, 4, 14);
+      ctx.strokeRect(x + 24, y + 34, 4,  8);
+    } else {
+      ctx.strokeRect(x + 12, y + 34, 4,  8);
+      ctx.strokeRect(x + 24, y + 34, 4, 14);
+    }
+  }
+  ctx.restore();
+}
+
+// Dispatches to the correct skin renderer
+function _drawDinoWithSkin(ctx, x, y, w, h, state, bodyCol, accentCol) {
+  if (characterConfig.skin === 'custom_image' && characterConfig.customImage) {
+    const ss = characterConfig.spriteSheet;
+    if (ss && ss.enabled) {
+      const cellIndex = (ss.frameMap && ss.frameMap[state] !== undefined) ? ss.frameMap[state] : 0;
+      const cols = ss.cols || 4;
+      const rows = ss.rows || 2;
+      const cellWidth = characterConfig.customImage.width / cols;
+      const cellHeight = characterConfig.customImage.height / rows;
+      const colIndex = cellIndex % cols;
+      const rowIndex = Math.floor(cellIndex / cols);
+      const cellX = colIndex * cellWidth;
+      const cellY = rowIndex * cellHeight;
+      ctx.drawImage(
+        characterConfig.customImage,
+        cellX, cellY, cellWidth, cellHeight,
+        x, y, w, h
+      );
+    } else {
+      ctx.drawImage(characterConfig.customImage, x, y, w, h);
+    }
+    if (state === 'crashed') { ctx.fillStyle = '#ff3333'; ctx.fillRect(x + 24, y + 4, 3, 3); }
+    return;
+  }
+  ctx.fillStyle = bodyCol;
+  const sk = characterConfig.skin;
+  if      (sk === 'robot') drawRobotDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else if (sk === 'ghost') drawGhostDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else if (sk === 'neon')  drawNeonDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+  else                     drawClassicDinoSprite(ctx, x, y, w, h, state, bodyCol, accentCol);
+}
+
+// ============================================================
+// --- CHARACTER CONFIG PERSISTENCE ---
+// ============================================================
+
+function loadCharacterConfig() {
+  try {
+    const saved = localStorage.getItem('dino_char_config');
+    if (!saved) return;
+    const p = JSON.parse(saved);
+    characterConfig.skin             = p.skin             || 'classic';
+    characterConfig.bodyColor        = p.bodyColor        || null;
+    characterConfig.accentColor      = p.accentColor      || null;
+    characterConfig.customImageDataUrl = p.customImageDataUrl || null;
+    if (characterConfig.customImageDataUrl) {
+      const img = new Image();
+      img.onload = () => { characterConfig.customImage = img; };
+      img.src    = characterConfig.customImageDataUrl;
+    }
+    // Load spriteSheet settings if present, otherwise keep defaults
+    if (p.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: !!p.spriteSheet.enabled,
+        rows: parseInt(p.spriteSheet.rows, 10) || 2,
+        cols: parseInt(p.spriteSheet.cols, 10) || 4,
+        frameMap: {
+          running_0: p.spriteSheet.frameMap?.running_0 !== undefined ? parseInt(p.spriteSheet.frameMap.running_0, 10) : 0,
+          running_1: p.spriteSheet.frameMap?.running_1 !== undefined ? parseInt(p.spriteSheet.frameMap.running_1, 10) : 1,
+          jumping:   p.spriteSheet.frameMap?.jumping   !== undefined ? parseInt(p.spriteSheet.frameMap.jumping, 10)   : 0,
+          ducking_0: p.spriteSheet.frameMap?.ducking_0 !== undefined ? parseInt(p.spriteSheet.frameMap.ducking_0, 10) : 2,
+          ducking_1: p.spriteSheet.frameMap?.ducking_1 !== undefined ? parseInt(p.spriteSheet.frameMap.ducking_1, 10) : 3,
+          crashed:   p.spriteSheet.frameMap?.crashed   !== undefined ? parseInt(p.spriteSheet.frameMap.crashed, 10)   : 4
+        }
+      };
+    }
+  } catch(e) { console.warn('[CharConfig] Load failed:', e); }
+}
+
+function saveCharacterConfig() {
+  try {
+    localStorage.setItem('dino_char_config', JSON.stringify({
+      skin:               characterConfig.skin,
+      bodyColor:          characterConfig.bodyColor,
+      accentColor:        characterConfig.accentColor,
+      customImageDataUrl: characterConfig.customImageDataUrl,
+      spriteSheet:        characterConfig.spriteSheet
+    }));
+  } catch(e) { console.warn('[CharConfig] Save failed (storage full?):', e); }
+}
+
+function resizeImageFile(file, maxPx, callback) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      let sw = img.width, sh = img.height;
+      if (sw > maxPx || sh > maxPx) {
+        if (sw >= sh) { sh = Math.round(sh * maxPx / sw); sw = maxPx; }
+        else          { sw = Math.round(sw * maxPx / sh); sh = maxPx; }
+      }
+      const oc = document.createElement('canvas');
+      oc.width = sw; oc.height = sh;
+      oc.getContext('2d').drawImage(img, 0, 0, sw, sh);
+      callback(oc.toDataURL('image/png', 0.85));
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyUploadedImage(file) {
+  resizeImageFile(file, 400, (dataUrl) => {
+    characterConfig.customImageDataUrl = dataUrl;
+    characterConfig.skin = 'custom_image';
+    if (!characterConfig.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: {
+          running_0: 0,
+          running_1: 1,
+          jumping: 0,
+          ducking_0: 2,
+          ducking_1: 3,
+          crashed: 4
+        }
+      };
+    }
+    const img = new Image();
+    img.onload = () => {
+      characterConfig.customImage = img;
+      const previewImg = document.getElementById('upload-preview-img');
+      const previewImgFallback = document.getElementById('upload-preview-img-fallback');
+      if (previewImg) previewImg.src = dataUrl;
+      if (previewImgFallback) previewImgFallback.src = dataUrl;
+      
+      document.getElementById('upload-preview-wrapper')?.classList.remove('hidden');
+      document.getElementById('upload-zone')?.classList.add('hidden');
+      document.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+      
+      _syncModalToConfig();
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ============================================================
+// --- CHARACTER CUSTOMIZATION MODAL ---
+// ============================================================
+
+function initCustomizationModal() {
+  const modal      = document.getElementById('character-modal');
+  const openBtn    = document.getElementById('customize-btn');
+  const closeBtn   = document.getElementById('close-char-modal');
+  const applyBtn   = document.getElementById('apply-char-btn');
+  const resetBtn   = document.getElementById('reset-char-btn');
+  const backdrop   = modal.querySelector('.char-modal-backdrop');
+  const fileInput  = document.getElementById('image-upload-input');
+  const uploadZone = document.getElementById('upload-zone');
+
+  // --- OPEN ---
+  openBtn.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => modal.classList.add('char-modal--open'));
+    _syncModalToConfig();
+    _genSwatches('body-swatches',   CHAR_BODY_COLORS,   'body');
+    _genSwatches('accent-swatches', CHAR_ACCENT_COLORS, 'accent');
+    _startPreviewAnim();
+  });
+
+  // --- CLOSE ---
+  function closeModal() {
+    modal.classList.remove('char-modal--open');
+    setTimeout(() => modal.classList.add('hidden'), 320);
+    _stopPreviewAnim();
+  }
+  closeBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+
+  // --- TABS ---
+  modal.querySelectorAll('.char-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.char-tab').forEach(t => t.classList.remove('active'));
+      modal.querySelectorAll('.char-tab-content').forEach(tc => tc.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+  });
+
+  // --- SKIN CARDS ---
+  modal.querySelectorAll('.skin-card').forEach(card => {
+    card.addEventListener('click', () => {
+      modal.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      characterConfig.skin = card.dataset.skin;
+    });
+  });
+
+  // --- COLOR PICKERS ---
+  document.getElementById('body-color-picker').addEventListener('input', e => {
+    characterConfig.bodyColor = e.target.value;
+    document.querySelectorAll('#body-swatches .swatch:not(.swatch-custom)').forEach(s => s.classList.remove('active'));
+  });
+  document.getElementById('accent-color-picker').addEventListener('input', e => {
+    characterConfig.accentColor = e.target.value;
+    document.querySelectorAll('#accent-swatches .swatch:not(.swatch-custom)').forEach(s => s.classList.remove('active'));
+  });
+
+  // --- IMAGE UPLOAD ---
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) applyUploadedImage(f);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) applyUploadedImage(e.target.files[0]);
+  });
+
+  // --- REMOVE IMAGE ---
+  document.getElementById('remove-custom-image').addEventListener('click', () => {
+    characterConfig.customImage        = null;
+    characterConfig.customImageDataUrl = null;
+    if (characterConfig.skin === 'custom_image') characterConfig.skin = 'classic';
+    document.getElementById('upload-preview-wrapper').classList.add('hidden');
+    document.getElementById('upload-zone').classList.remove('hidden');
+    _syncModalToConfig();
+  });
+
+  // --- APPLY ---
+  applyBtn.addEventListener('click', () => {
+    saveCharacterConfig();
+    const orig = applyBtn.textContent;
+    applyBtn.textContent = '\u2713 Saved!';
+    applyBtn.disabled = true;
+    setTimeout(() => { applyBtn.textContent = orig; applyBtn.disabled = false; }, 1200);
+    closeModal();
+  });
+
+  // --- RESET ---
+  resetBtn.addEventListener('click', () => {
+    characterConfig = {
+      skin: 'classic',
+      bodyColor: null,
+      accentColor: null,
+      customImage: null,
+      customImageDataUrl: null,
+      spriteSheet: {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: {
+          running_0: 0,
+          running_1: 1,
+          jumping: 0,
+          ducking_0: 2,
+          ducking_1: 3,
+          crashed: 4
+        }
+      }
+    };
+    localStorage.removeItem('dino_char_config');
+    document.getElementById('upload-preview-wrapper').classList.add('hidden');
+    document.getElementById('upload-zone').classList.remove('hidden');
+    _syncModalToConfig();
+    _genSwatches('body-swatches',   CHAR_BODY_COLORS,   'body');
+    _genSwatches('accent-swatches', CHAR_ACCENT_COLORS, 'accent');
+  });
+
+  // --- SPRITE SHEET EDITOR UI LISTENERS ---
+  const enableCheckbox = document.getElementById('spritesheet-enable');
+  const rowsInput = document.getElementById('spritesheet-rows');
+  const colsInput = document.getElementById('spritesheet-cols');
+
+  enableCheckbox.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    if (!characterConfig.spriteSheet) {
+      characterConfig.spriteSheet = {
+        enabled: false,
+        rows: 2,
+        cols: 4,
+        frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+      };
+    }
+    characterConfig.spriteSheet.enabled = enabled;
+    document.getElementById('spritesheet-options').classList.toggle('hidden', !enabled);
+    document.getElementById('spritesheet-disabled-preview').classList.toggle('hidden', enabled);
+    document.querySelector('.char-modal-panel').classList.toggle('expanded', enabled);
+
+    if (enabled) {
+      _updateVisualGridOverlay();
+      characterConfig.skin = 'custom_image';
+      document.querySelectorAll('.skin-card').forEach(c => c.classList.remove('active'));
+    }
+  });
+
+  const handleDimensionChange = () => {
+    let rowsVal = parseInt(rowsInput.value, 10);
+    if (isNaN(rowsVal) || rowsVal < 1) rowsVal = 1;
+    if (rowsVal > 10) rowsVal = 10;
+    rowsInput.value = rowsVal;
+
+    let colsVal = parseInt(colsInput.value, 10);
+    if (isNaN(colsVal) || colsVal < 1) colsVal = 1;
+    if (colsVal > 10) colsVal = 10;
+    colsInput.value = colsVal;
+
+    _updateVisualGridOverlay();
+    _updateFrameMapFromUI();
+  };
+
+  rowsInput.addEventListener('change', handleDimensionChange);
+  colsInput.addEventListener('change', handleDimensionChange);
+
+  const _updateFrameMapFromUI = () => {
+    if (!characterConfig.spriteSheet) return;
+    characterConfig.spriteSheet.frameMap = {
+      running_0: parseInt(document.getElementById('map-run-0').value, 10) || 0,
+      running_1: parseInt(document.getElementById('map-run-1').value, 10) || 0,
+      jumping:   parseInt(document.getElementById('map-jump').value, 10) || 0,
+      ducking_0: parseInt(document.getElementById('map-duck-0').value, 10) || 0,
+      ducking_1: parseInt(document.getElementById('map-duck-1').value, 10) || 0,
+      crashed:   parseInt(document.getElementById('map-crash').value, 10) || 0
+    };
+  };
+
+  const selects = ['map-run-0', 'map-run-1', 'map-jump', 'map-duck-0', 'map-duck-1', 'map-crash'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', _updateFrameMapFromUI);
+      // Interactive preview override on focus
+      el.addEventListener('focus', () => {
+        if (id === 'map-run-0') _previewStateOverride = 'running_0';
+        else if (id === 'map-run-1') _previewStateOverride = 'running_1';
+        else if (id === 'map-jump') _previewStateOverride = 'jumping';
+        else if (id === 'map-duck-0') _previewStateOverride = 'ducking_0';
+        else if (id === 'map-duck-1') _previewStateOverride = 'ducking_1';
+        else if (id === 'map-crash') _previewStateOverride = 'crashed';
+      });
+      el.addEventListener('blur', () => {
+        _previewStateOverride = null;
+      });
+
+      // Hover preview override on parent map-row element
+      const row = el.closest('.map-row');
+      if (row) {
+        row.addEventListener('mouseenter', () => {
+          if (id === 'map-run-0') _previewStateOverride = 'running_0';
+          else if (id === 'map-run-1') _previewStateOverride = 'running_1';
+          else if (id === 'map-jump') _previewStateOverride = 'jumping';
+          else if (id === 'map-duck-0') _previewStateOverride = 'ducking_0';
+          else if (id === 'map-duck-1') _previewStateOverride = 'ducking_1';
+          else if (id === 'map-crash') _previewStateOverride = 'crashed';
+        });
+        row.addEventListener('mouseleave', () => {
+          _previewStateOverride = null;
+        });
+      }
+    }
+  });
+}
+
+function _syncModalToConfig() {
+  document.querySelectorAll('.skin-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.skin === characterConfig.skin)
+  );
+  if (characterConfig.bodyColor)   document.getElementById('body-color-picker').value   = characterConfig.bodyColor;
+  if (characterConfig.accentColor) document.getElementById('accent-color-picker').value = characterConfig.accentColor;
+  
+  const activeTabIndex = characterConfig.skin === 'custom_image' ? 2 : 0;
+  document.querySelectorAll('.char-tab').forEach((t, i)          => t.classList.toggle('active', i === activeTabIndex));
+  document.querySelectorAll('.char-tab-content').forEach((tc, i) => tc.classList.toggle('active', i === activeTabIndex));
+  
+  const hasImg = !!characterConfig.customImageDataUrl;
+  document.getElementById('upload-preview-wrapper').classList.toggle('hidden', !hasImg);
+  document.getElementById('upload-zone').classList.toggle('hidden', hasImg);
+  
+  if (hasImg) {
+    const dataUrl = characterConfig.customImageDataUrl;
+    document.getElementById('upload-preview-img').src = dataUrl;
+    document.getElementById('upload-preview-img-fallback').src = dataUrl;
+    
+    const ss = characterConfig.spriteSheet || {
+      enabled: false,
+      rows: 2,
+      cols: 4,
+      frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+    };
+    
+    const enableCheckbox = document.getElementById('spritesheet-enable');
+    enableCheckbox.checked = ss.enabled;
+    
+    document.getElementById('spritesheet-options').classList.toggle('hidden', !ss.enabled);
+    document.getElementById('spritesheet-disabled-preview').classList.toggle('hidden', ss.enabled);
+    document.querySelector('.char-modal-panel').classList.toggle('expanded', ss.enabled);
+    
+    document.getElementById('spritesheet-rows').value = ss.rows;
+    document.getElementById('spritesheet-cols').value = ss.cols;
+    
+    _updateVisualGridOverlay();
+    
+    if (ss.frameMap) {
+      document.getElementById('map-run-0').value = ss.frameMap.running_0 ?? 0;
+      document.getElementById('map-run-1').value = ss.frameMap.running_1 ?? 1;
+      document.getElementById('map-jump').value = ss.frameMap.jumping ?? 0;
+      document.getElementById('map-duck-0').value = ss.frameMap.ducking_0 ?? 2;
+      document.getElementById('map-duck-1').value = ss.frameMap.ducking_1 ?? 3;
+      document.getElementById('map-crash').value = ss.frameMap.crashed ?? 4;
+    }
+  } else {
+    document.getElementById('spritesheet-enable').checked = false;
+    document.getElementById('spritesheet-options').classList.add('hidden');
+    document.getElementById('spritesheet-disabled-preview').classList.remove('hidden');
+    document.querySelector('.char-modal-panel').classList.remove('expanded');
+  }
+}
+
+function _updateVisualGridOverlay() {
+  const rowsInput = document.getElementById('spritesheet-rows');
+  const colsInput = document.getElementById('spritesheet-cols');
+  
+  let rows = Math.max(1, Math.min(10, parseInt(rowsInput.value, 10) || 1));
+  let cols = Math.max(1, Math.min(10, parseInt(colsInput.value, 10) || 1));
+  
+  if (!characterConfig.spriteSheet) {
+    characterConfig.spriteSheet = {
+      enabled: false,
+      rows: 2,
+      cols: 4,
+      frameMap: { running_0: 0, running_1: 1, jumping: 0, ducking_0: 2, ducking_1: 3, crashed: 4 }
+    };
+  }
+  characterConfig.spriteSheet.rows = rows;
+  characterConfig.spriteSheet.cols = cols;
+  
+  const totalCells = rows * cols;
+  const overlay = document.getElementById('grid-overlay');
+  if (overlay) {
+    overlay.style.setProperty('--rows', rows);
+    overlay.style.setProperty('--cols', cols);
+    overlay.innerHTML = '';
+    for (let i = 0; i < totalCells; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell-label';
+      cell.textContent = i;
+      overlay.appendChild(cell);
+    }
+  }
+  
+  const selects = [
+    document.getElementById('map-run-0'),
+    document.getElementById('map-run-1'),
+    document.getElementById('map-jump'),
+    document.getElementById('map-duck-0'),
+    document.getElementById('map-duck-1'),
+    document.getElementById('map-crash')
+  ];
+  
+  selects.forEach(sel => {
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '';
+    for (let i = 0; i < totalCells; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `Cell ${i}`;
+      sel.appendChild(opt);
+    }
+    if (currentVal !== "" && parseInt(currentVal, 10) < totalCells) {
+      sel.value = currentVal;
+    } else {
+      if (sel.id === 'map-run-0') sel.value = 0;
+      else if (sel.id === 'map-run-1') sel.value = Math.min(1, totalCells - 1);
+      else if (sel.id === 'map-jump') sel.value = 0;
+      else if (sel.id === 'map-duck-0') sel.value = Math.min(2, totalCells - 1);
+      else if (sel.id === 'map-duck-1') sel.value = Math.min(3, totalCells - 1);
+      else if (sel.id === 'map-crash') sel.value = Math.min(4, totalCells - 1);
+    }
+  });
+}
+
+function _genSwatches(containerId, colors, type) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  const activeColor = type === 'body' ? characterConfig.bodyColor : characterConfig.accentColor;
+  colors.forEach(color => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = color;
+    if (activeColor === color) s.classList.add('active');
+    s.addEventListener('click', () => {
+      container.querySelectorAll('.swatch').forEach(sw => sw.classList.remove('active'));
+      s.classList.add('active');
+      if (type === 'body') {
+        characterConfig.bodyColor = color;
+        document.getElementById('body-color-picker').value = color;
+      } else {
+        characterConfig.accentColor = color;
+        document.getElementById('accent-color-picker').value = color;
+      }
+    });
+    container.appendChild(s);
+  });
+  // '+' custom picker swatch
+  const plus = document.createElement('div');
+  plus.className = 'swatch swatch-custom';
+  plus.textContent = '+';
+  plus.title = 'Pick custom color';
+  plus.addEventListener('click', () =>
+    document.getElementById(type === 'body' ? 'body-color-picker' : 'accent-color-picker').click()
+  );
+  container.appendChild(plus);
+}
+
+// --- PREVIEW ANIMATION LOOP ---
+
+function _startPreviewAnim() {
+  _stopPreviewAnim();
+  _previewLastTime = performance.now();
+  _previewRunFrame = 0; _previewRunTimer = 0;
+  (function loop(ts) {
+    const dt = Math.min((ts - _previewLastTime) / 1000, 0.05);
+    _previewLastTime = ts;
+    _previewRunTimer += dt;
+    if (_previewRunTimer > 0.1) { _previewRunFrame = (_previewRunFrame + 1) % 2; _previewRunTimer = 0; }
+    _drawPreviewCanvas();
+    _previewAnimId = requestAnimationFrame(loop);
+  })(performance.now());
+}
+
+function _stopPreviewAnim() {
+  if (_previewAnimId) { cancelAnimationFrame(_previewAnimId); _previewAnimId = null; }
+}
+
+function _drawPreviewCanvas() {
+  const canvas = document.getElementById('char-preview-canvas');
+  if (!canvas) return;
+  const pc = canvas.getContext('2d');
+  const pw = canvas.width, ph = canvas.height;
+  pc.clearRect(0, 0, pw, ph);
+
+  // Background
+  const bg = activeTheme === 'classic-light' ? '#efefef'
+           : activeTheme === 'classic-dark'  ? '#1c1c1e'
+           : activeTheme === 'cyberpunk'     ? '#05050a'
+           : activeTheme === 'space-nebula'  ? '#0b0217' : '#0e0625';
+  pc.fillStyle = bg;
+  pc.fillRect(0, 0, pw, ph);
+
+  // Subtle grid
+  pc.strokeStyle = activeTheme.includes('light') ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+  pc.lineWidth = 1;
+  for (let gx = 0; gx <= pw; gx += 20) { pc.beginPath(); pc.moveTo(gx,0); pc.lineTo(gx,ph); pc.stroke(); }
+  for (let gy = 0; gy <= ph; gy += 20) { pc.beginPath(); pc.moveTo(0,gy); pc.lineTo(pw,gy); pc.stroke(); }
+
+  // Ground line
+  const groundY = Math.round(ph * 0.78);
+  pc.strokeStyle = themeColors.ground; pc.lineWidth = 2;
+  pc.beginPath(); pc.moveTo(0, groundY); pc.lineTo(pw, groundY); pc.stroke();
+
+  // Determine state & dimensions
+  let previewState = `running_${_previewRunFrame}`;
+  if (_previewStateOverride) {
+    previewState = _previewStateOverride;
+  }
+
+  let dw = 44, dh = 48;
+  if (previewState.startsWith('ducking')) {
+    dw = 55;
+    dh = 28;
+  }
+
+  const dx = Math.round((pw - dw) / 2);
+  const dy = groundY - dh;
+  const bodyCol   = characterConfig.bodyColor   || themeColors.dino;
+  const accentCol = characterConfig.accentColor || (activeTheme.includes('light') ? '#f7f7f7' : '#000000');
+
+  pc.save();
+  if (activeTheme !== 'classic-light' && activeTheme !== 'classic-dark') {
+    pc.shadowBlur = 12; pc.shadowColor = bodyCol;
+  }
+  _drawDinoWithSkin(pc, dx, dy, dw, dh, previewState, bodyCol, accentCol);
+  pc.restore();
+
+  // Running dust puffs (only show if running)
+  if (previewState.startsWith('running')) {
+    pc.globalAlpha = 0.25;
+    pc.fillStyle = themeColors.ground;
+    for (let d = 0; d < 3; d++) pc.fillRect(dx + 2 - d * 8, groundY, 5 - d, 2);
+    pc.globalAlpha = 1;
+  }
 }
 
 // --- POWER-UP FLOATING ENTITIES ---
@@ -907,6 +1773,7 @@ class RunningDust extends Particle {
     this.color = activeTheme.includes('light') ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.2)';
     if (activeTheme === 'synthwave') this.color = 'rgba(255, 0, 127, 0.3)';
     if (activeTheme === 'cyberpunk') this.color = 'rgba(0, 255, 102, 0.3)';
+    if (activeTheme === 'space-nebula') this.color = 'rgba(186, 85, 211, 0.35)';
     this.size = Math.random() * 5 + 2;
     this.decay = 2.5;
   }
@@ -927,11 +1794,89 @@ class CrashShard extends Particle {
   }
 }
 
+class FloatingText {
+  constructor(x, y, text, color) {
+    this.x = x;
+    this.y = y;
+    this.text = text;
+    this.color = color || '#ffffff';
+    this.vy = -50; // rise upwards
+    this.alpha = 1;
+    this.markedForDeletion = false;
+  }
+  update(dt) {
+    this.y += this.vy * dt;
+    this.alpha -= 1.5 * dt; // fade out quickly
+    if (this.alpha <= 0) {
+      this.markedForDeletion = true;
+    }
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.alpha);
+    ctx.fillStyle = this.color;
+    if (activeTheme.includes('classic')) {
+      ctx.font = '8px "Press Start 2P"';
+    } else {
+      ctx.font = 'bold 10px Orbitron, sans-serif';
+    }
+    ctx.textAlign = 'center';
+    ctx.fillText(this.text, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+function spawnObstacleExplosion(x, y) {
+  const numShards = 8 + Math.floor(Math.random() * 5);
+  for (let i = 0; i < numShards; i++) {
+    particles.push(new CrashShard(x, y, themeColors.obstacle));
+  }
+}
+
+function spawnFloatingText(x, y, text, color) {
+  particles.push(new FloatingText(x, y, text, color));
+}
+
+function fireProjectile() {
+  if (ammo <= 0) {
+    soundManager.playDryFire();
+    if (ammoCounter) {
+      ammoCounter.classList.add('shake');
+      setTimeout(() => {
+        ammoCounter.classList.remove('shake');
+      }, 300);
+    }
+    return;
+  }
+  
+  ammo--;
+  updateAmmoHUD();
+  soundManager.playShoot();
+  
+  const startX = dino.x + dino.width;
+  const startY = dino.y + dino.height / 2 - 4;
+  
+  projectiles.push(new Projectile(startX, startY, activeTheme));
+}
+
+function updateAmmoHUD() {
+  if (!ammoCounter) return;
+  const segments = ammoCounter.querySelectorAll('.ammo-segment');
+  segments.forEach((seg, idx) => {
+    if (idx < ammo) {
+      seg.classList.add('active');
+    } else {
+      seg.classList.remove('active');
+    }
+  });
+}
+
 // Helper generators for specific effect animations
 function spawnLandingSparks(x, y) {
   let col = activeTheme.includes('light') ? '#535353' : '#ffffff';
   if (activeTheme === 'synthwave') col = themeColors.secondary;
   if (activeTheme === 'cyberpunk') col = themeColors.accent;
+  if (activeTheme === 'space-nebula') col = themeColors.secondary;
   
   for (let i = 0; i < 8; i++) {
     const p = new Particle(x, y);
@@ -951,6 +1896,7 @@ function spawnJumpDust(x, y) {
     p.vy = -Math.random() * 20;
     p.color = activeTheme.includes('light') ? 'rgba(0,0,0,0.1)' : 'rgba(255, 255, 255, 0.15)';
     if (activeTheme === 'synthwave') p.color = 'rgba(0, 243, 255, 0.3)';
+    if (activeTheme === 'space-nebula') p.color = 'rgba(0, 255, 255, 0.35)';
     p.size = Math.random() * 6 + 2;
     p.decay = 2.0;
     particles.push(p);
@@ -1032,6 +1978,12 @@ function applyTheme(themeName) {
       obstacle: '#f7e018', obstacleGlow: '#f7e018', text: '#00ff66',
       sky: '#000000', accent: '#00ff66', secondary: '#f7e018', ambientGlow: 'rgba(0, 255, 102, 0.2)'
     };
+  } else if (themeName === 'space-nebula') {
+    themeColors = {
+      ground: '#00ffff', dino: '#ffffff', dinoGlow: '#ba55d3',
+      obstacle: '#ba55d3', obstacleGlow: '#ba55d3', text: '#ffffff',
+      sky: '#0b0217', accent: '#ba55d3', secondary: '#00ffff', ambientGlow: 'rgba(186, 85, 211, 0.25)'
+    };
   }
 
   // Set mobile buttons borders/colors matching themes
@@ -1063,6 +2015,10 @@ function toggleSound() {
 // --- GAME LOGIC FLOW ---
 
 function startGame() {
+  if (crashTimeoutId) {
+    clearTimeout(crashTimeoutId);
+    crashTimeoutId = null;
+  }
   state = GAME_STATE.PLAYING;
   
   // Hide UI overlays
@@ -1081,6 +2037,8 @@ function startGame() {
   currentSpeed = INITIAL_SPEED;
   nextObstacleTimer = 1.0; // spawn first obstacle after 1s
   nextPowerUpTimer = 10.0; // spawn powerup after 10s
+  nextAmmoTimer = 6.0; // spawn first ammo pickup after 6s
+  ammo = 0;
   
   // Instantiate Dino
   dino = new DinoCharacter();
@@ -1088,7 +2046,18 @@ function startGame() {
   // Clear lists
   obstacles = [];
   powerups = [];
+  projectiles = [];
+  ammoPickups = [];
   particles = [];
+  
+  if (gameMode === 'arcade') {
+    if (hudAmmoBox) hudAmmoBox.classList.remove('hidden');
+    if (mobileShootBtn) mobileShootBtn.classList.remove('hidden');
+  } else {
+    if (hudAmmoBox) hudAmmoBox.classList.add('hidden');
+    if (mobileShootBtn) mobileShootBtn.classList.add('hidden');
+  }
+  updateAmmoHUD();
   
   // Deactivate powerup bar in classic mode
   dino.deactivatePowerUp();
@@ -1117,7 +2086,7 @@ function resumeGame() {
 }
 
 function triggerGameOver() {
-  state = GAME_STATE.GAMEOVER;
+  state = GAME_STATE.CRASHED;
   dino.isCrashed = true;
   pauseBtn.disabled = true;
   
@@ -1127,6 +2096,17 @@ function triggerGameOver() {
   
   soundManager.playGameOver();
   saveHighScore();
+  
+  crashTimeoutId = setTimeout(() => {
+    crashTimeoutId = null;
+    if (state === GAME_STATE.CRASHED) {
+      showGameOverScreen();
+    }
+  }, 1500);
+}
+
+function showGameOverScreen() {
+  state = GAME_STATE.GAMEOVER;
   
   // UI Display
   finalScoreVal.textContent = String(score).padStart(5, '0');
@@ -1159,6 +2139,13 @@ function setupEventListeners() {
       e.preventDefault();
       if (state === GAME_STATE.PLAYING) {
         dino.duck(true);
+      }
+    }
+
+    if (e.code === 'KeyF') {
+      e.preventDefault();
+      if (state === GAME_STATE.PLAYING && gameMode === 'arcade') {
+        fireProjectile();
       }
     }
 
@@ -1229,6 +2216,15 @@ function setupEventListeners() {
       dino.duck(false);
     }
   });
+
+  if (mobileShootBtn) {
+    mobileShootBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (state === GAME_STATE.PLAYING && gameMode === 'arcade') {
+        fireProjectile();
+      }
+    });
+  }
 
   // Clicking on canvas starts game too
   canvas.addEventListener('mousedown', (e) => {
@@ -1307,6 +2303,23 @@ function updateSpawns(dt) {
       // Spawn next powerup in 12-20s
       nextPowerUpTimer = 12 + Math.random() * 8;
     }
+    
+    // 3. Spawning Ammo Pickups (only in arcade mode)
+    nextAmmoTimer -= dt * timeMult;
+    if (nextAmmoTimer <= 0) {
+      const yLevel = Math.random() < 0.6 ? 220 : 150;
+      
+      // Prevent spawning overlapping elements
+      const nearObstacle = obstacles.some(obs => obs.x > 750);
+      const nearPowerUp = powerups.some(pw => pw.x > 750);
+      
+      if (!nearObstacle && !nearPowerUp) {
+        ammoPickups.push(new AmmoPickup(yLevel, activeTheme));
+        nextAmmoTimer = 12 + Math.random() * 6;
+      } else {
+        nextAmmoTimer = 0.5; // retry soon
+      }
+    }
   }
 }
 
@@ -1321,6 +2334,8 @@ function drawScenery(dt) {
     drawSynthwaveBackground(dt, speedFactor);
   } else if (activeTheme === 'cyberpunk') {
     drawCyberpunkBackground(dt, speedFactor);
+  } else if (activeTheme === 'space-nebula') {
+    drawSpaceBackground(dt, speedFactor);
   } else {
     // Classic Day/Night dynamic backdrop
     drawClassicBackground(dt, speedFactor);
@@ -1447,6 +2462,159 @@ function drawCyberpunkBackground(dt, speedFactor) {
 
   // Draw cyber green matrix grid
   draw3DGrid(248, 340, groundGridOffset); // Expanded end Y to match canvas height
+  
+  groundGridOffset -= currentSpeed * dt * speedFactor;
+  if (groundGridOffset <= -40) groundGridOffset = 0;
+}
+
+function drawSpaceBackground(dt, speedFactor) {
+  // 1. Draw glowing space nebula clouds
+  ctx.save();
+  
+  // Nebula 1: glowing violet/purple
+  let neb1X = 250 - (distanceRan * 0.1) % 1000;
+  if (neb1X < -200) neb1X += 1000;
+  let grad1 = ctx.createRadialGradient(neb1X, 90, 5, neb1X, 90, 160);
+  grad1.addColorStop(0, 'rgba(186, 85, 211, 0.22)');
+  grad1.addColorStop(0.5, 'rgba(123, 31, 162, 0.08)');
+  grad1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad1;
+  ctx.beginPath();
+  ctx.arc(neb1X, 90, 160, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nebula 2: cosmic cyan/teal
+  let neb2X = 750 - (distanceRan * 0.12) % 1000;
+  if (neb2X < -200) neb2X += 1000;
+  let grad2 = ctx.createRadialGradient(neb2X, 70, 5, neb2X, 70, 140);
+  grad2.addColorStop(0, 'rgba(0, 255, 255, 0.16)');
+  grad2.addColorStop(0.5, 'rgba(0, 136, 255, 0.06)');
+  grad2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad2;
+  ctx.beginPath();
+  ctx.arc(neb2X, 70, 140, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.restore();
+
+  // 2. Twinkling space stars with multi-colors and cross flares
+  ctx.save();
+  stars.forEach(star => {
+    star.alpha += Math.sin(Date.now() * 0.001 * star.pulseSpeed) * 0.05;
+    ctx.globalAlpha = Math.max(0.1, Math.min(1.0, star.alpha));
+    
+    // Choose star color based on hash value
+    const hash = Math.floor(star.x + star.y);
+    if (hash % 3 === 0) {
+      ctx.fillStyle = '#00ffff';
+    } else if (hash % 3 === 1) {
+      ctx.fillStyle = '#ba55d3';
+    } else {
+      ctx.fillStyle = '#ffffff';
+    }
+    
+    ctx.fillRect(star.x, star.y, star.size, star.size);
+    
+    // Tiny cross flare for brighter/larger stars
+    if (star.size > 1.8) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillRect(star.x - 2, star.y + 0.5, star.size + 4, 0.5);
+      ctx.fillRect(star.x + 0.5, star.y - 2, 0.5, star.size + 4);
+    }
+  });
+  ctx.restore();
+
+  // 3. Parallax Celestial Bodies & Space Stations
+  terrainFeatures.forEach((feature, idx) => {
+    feature.x -= feature.speed * 0.25 * dt * speedFactor;
+    if (feature.x + feature.width < 0) {
+      feature.x = 800 + Math.random() * 100;
+    }
+
+    ctx.save();
+    if (idx === 0) {
+      // Draw ringed planet (Saturn style)
+      const px = feature.x + feature.width / 2;
+      const py = 75;
+      const r = 20;
+
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#00ffff';
+
+      // Ring back half
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.55)';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 38, 9, Math.PI / 8, Math.PI, 0);
+      ctx.stroke();
+
+      // Planet sphere
+      let planetGrad = ctx.createLinearGradient(px - r, py - r, px + r, py + r);
+      planetGrad.addColorStop(0, '#ba55d3');
+      planetGrad.addColorStop(1, '#0e031a');
+      ctx.fillStyle = planetGrad;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ring front half
+      ctx.beginPath();
+      ctx.ellipse(px, py, 38, 9, Math.PI / 8, 0, Math.PI);
+      ctx.stroke();
+    } else if (idx === 1) {
+      // Draw distant gas planet
+      const px = feature.x + feature.width / 2;
+      const py = 95;
+      const r = 14;
+      
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#ba55d3';
+      
+      let planetGrad = ctx.createLinearGradient(px - r, py - r, px + r, py + r);
+      planetGrad.addColorStop(0, '#00ffff');
+      planetGrad.addColorStop(1, '#042129');
+      ctx.fillStyle = planetGrad;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Draw high-tech solar space station
+      const px = feature.x + feature.width / 2;
+      const py = 60;
+      
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ba55d3';
+      ctx.strokeStyle = '#ba55d3';
+      ctx.lineWidth = 1.5;
+      
+      // Central hub ring
+      ctx.beginPath();
+      ctx.arc(px, py, 14, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Core glowing reactor
+      ctx.fillStyle = '#00ffff';
+      ctx.beginPath();
+      ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Left and right solar wing struts
+      ctx.strokeStyle = '#ba55d3';
+      ctx.beginPath();
+      ctx.moveTo(px - 32, py);
+      ctx.lineTo(px + 32, py);
+      ctx.stroke();
+      
+      // Solar wing panels
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.85)';
+      ctx.fillRect(px - 32, py - 6, 12, 12);
+      ctx.fillRect(px + 20, py - 6, 12, 12);
+    }
+    ctx.restore();
+  });
+
+  // 4. Vanishing 3D perspective grid lines
+  draw3DGrid(248, 340, groundGridOffset);
   
   groundGridOffset -= currentSpeed * dt * speedFactor;
   if (groundGridOffset <= -40) groundGridOffset = 0;
@@ -1705,28 +2873,34 @@ function gameLoop(timestamp) {
   }
 
   // DRAWING AND LOGIC BRANCHES
-  if (state === GAME_STATE.PLAYING) {
+  if (state === GAME_STATE.PLAYING || state === GAME_STATE.CRASHED) {
     // 1. Physics update & Difficulty acceleration
-    const isSlow = dino && dino.activePowerUp === POWERUP_TYPE.SLOW_MOTION;
-    if (currentSpeed < MAX_SPEED) {
-      const slowMult = isSlow ? 0.3 : 1.0;
-      currentSpeed += ACCELERATION * dt * slowMult;
+    if (state === GAME_STATE.PLAYING) {
+      const isSlow = dino && dino.activePowerUp === POWERUP_TYPE.SLOW_MOTION;
+      if (currentSpeed < MAX_SPEED) {
+        const slowMult = isSlow ? 0.3 : 1.0;
+        currentSpeed += ACCELERATION * dt * slowMult;
+      }
     }
 
     // 2. Entities updating
     dino.update(dt);
-    updateSpawns(dt);
+    if (state === GAME_STATE.PLAYING) {
+      updateSpawns(dt);
+    }
     
-    // Scenery background
-    drawScenery(dt);
+    // Scenery background (scroll only if playing)
+    drawScenery(state === GAME_STATE.PLAYING ? dt : 0);
 
     // Obstacles loop
     obstacles.forEach(obs => {
-      obs.update(dt);
+      if (state === GAME_STATE.PLAYING) {
+        obs.update(dt);
+      }
       obs.draw();
       
       // Collision checker
-      if (checkCollision(dino.getHitbox(), obs.getHitbox())) {
+      if (state === GAME_STATE.PLAYING && checkCollision(dino.getHitbox(), obs.getHitbox())) {
         if (dino.activePowerUp === POWERUP_TYPE.SHIELD) {
           // Shield absorbs collision
           dino.deactivatePowerUp();
@@ -1743,7 +2917,7 @@ function gameLoop(timestamp) {
       }
       
       // Pass stats tracking
-      if (!obs.passed && obs.x + obs.width < dino.x) {
+      if (state === GAME_STATE.PLAYING && !obs.passed && obs.x + obs.width < dino.x) {
         obs.passed = true;
         obstaclesAvoided++;
       }
@@ -1751,11 +2925,13 @@ function gameLoop(timestamp) {
     
     // Powerups loop
     powerups.forEach(pw => {
-      pw.update(dt);
+      if (state === GAME_STATE.PLAYING) {
+        pw.update(dt);
+      }
       pw.draw();
       
       // Touch collection checker
-      if (checkCollision(dino.getHitbox(), pw.getHitbox())) {
+      if (state === GAME_STATE.PLAYING && checkCollision(dino.getHitbox(), pw.getHitbox())) {
         pw.markedForDeletion = true;
         
         // 8 seconds of power-up duration
@@ -1763,9 +2939,50 @@ function gameLoop(timestamp) {
       }
     });
 
+    // Projectiles loop
+    projectiles.forEach(proj => {
+      if (state === GAME_STATE.PLAYING) {
+        proj.update(dt);
+        
+        // Projectile vs Obstacle collision checker
+        obstacles.forEach(obs => {
+          if (!obs.markedForDeletion && !proj.markedForDeletion && checkCollision(proj.getHitbox(), obs.getHitbox())) {
+            proj.markedForDeletion = true;
+            obs.markedForDeletion = true;
+            score += 100;
+            soundManager.playExplosion();
+            screenShake = 4;
+            spawnObstacleExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2);
+          }
+        });
+      }
+      proj.draw(ctx, themeColors);
+    });
+
+    // Ammo Pickups loop
+    ammoPickups.forEach(ammoItem => {
+      if (state === GAME_STATE.PLAYING) {
+        ammoItem.update(dt, currentSpeed);
+        
+        // Touch collection checker
+        if (checkCollision(dino.getHitbox(), ammoItem.getHitbox())) {
+          ammoItem.markedForDeletion = true;
+          if (ammo < 5) {
+            ammo++;
+          }
+          updateAmmoHUD();
+          soundManager.playReload();
+          spawnFloatingText(ammoItem.x + ammoItem.width / 2, ammoItem.y - 10, "+1 AMMO", themeColors.secondary);
+        }
+      }
+      ammoItem.draw(ctx, themeColors);
+    });
+
     // Cleanup arrays
     obstacles = obstacles.filter(o => !o.markedForDeletion);
     powerups = powerups.filter(p => !p.markedForDeletion);
+    projectiles = projectiles.filter(p => !p.markedForDeletion);
+    ammoPickups = ammoPickups.filter(a => !a.markedForDeletion);
     
     // Particles update
     particles.forEach(p => {
@@ -1783,6 +3000,8 @@ function gameLoop(timestamp) {
 
     obstacles.forEach(o => o.draw());
     powerups.forEach(p => p.draw());
+    projectiles.forEach(p => p.draw(ctx, themeColors));
+    ammoPickups.forEach(a => a.draw(ctx, themeColors));
     particles.forEach(p => {
       p.draw();
     });
