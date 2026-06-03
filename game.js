@@ -590,12 +590,20 @@ class Obstacle {
     
     ctx.fillStyle = themeColors.obstacle;
 
-    if (this.isCactus) {
-      // Programmatic pixel-cactus render
-      drawCactusSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+    if (activeTheme === 'space-nebula') {
+      if (this.isCactus) {
+        drawSpaceCrystalSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+      } else {
+        drawUFOSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame);
+      }
     } else {
-      // Flapping bird render
-      drawBirdSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame, activeTheme);
+      if (this.isCactus) {
+        // Programmatic pixel-cactus render
+        drawCactusSprite(ctx, this.x, this.y, this.width, this.height, this.type);
+      } else {
+        // Flapping bird render
+        drawBirdSprite(ctx, this.x, this.y, this.width, this.height, this.flapFrame, activeTheme);
+      }
     }
 
     ctx.restore();
@@ -692,6 +700,83 @@ function drawBirdSprite(ctx, x, y, w, h, flapFrame, theme) {
     // Tiny top flap
     ctx.fillRect(x + 20, y + 6, 4, 4);
   }
+
+  ctx.restore();
+}
+
+function drawSpaceCrystalSprite(ctx, x, y, w, h, type) {
+  ctx.save();
+  ctx.fillStyle = themeColors.obstacle;
+  
+  if (type === 'cactus_s' || type === 'cactus_l') {
+    drawCrystalShard(ctx, x, y, w, h, 'rgba(255, 255, 255, 0.45)');
+  } else if (type === 'cactus_double') {
+    drawCrystalShard(ctx, x, y + h * 0.2, w * 0.45, h * 0.8, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.48, y, w * 0.52, h, 'rgba(255, 255, 255, 0.45)');
+  } else if (type === 'cactus_triple') {
+    drawCrystalShard(ctx, x, y + h * 0.25, w * 0.3, h * 0.75, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.28, y, w * 0.42, h, 'rgba(255, 255, 255, 0.45)');
+    drawCrystalShard(ctx, x + w * 0.68, y + h * 0.15, w * 0.32, h * 0.85, 'rgba(255, 255, 255, 0.45)');
+  }
+  ctx.restore();
+}
+
+function drawCrystalShard(ctx, x, y, w, h, colorAccent) {
+  ctx.save();
+  // Outer outline
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y);
+  ctx.lineTo(x + w, y + h * 0.7);
+  ctx.lineTo(x + w * 0.7, y + h);
+  ctx.lineTo(x + w * 0.3, y + h);
+  ctx.lineTo(x, y + h * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Left side facet shadow reflection
+  ctx.fillStyle = colorAccent;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y);
+  ctx.lineTo(x + w * 0.5, y + h);
+  ctx.lineTo(x + w * 0.3, y + h);
+  ctx.lineTo(x, y + h * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawUFOSprite(ctx, x, y, w, h, flapFrame) {
+  ctx.save();
+  
+  // Cockpit glass dome (glowing cyan)
+  ctx.fillStyle = '#00ffff';
+  ctx.beginPath();
+  ctx.arc(x + w / 2, y + h * 0.38, w * 0.22, Math.PI, 0);
+  ctx.fill();
+  
+  // Main metal body
+  ctx.fillStyle = themeColors.obstacle;
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h * 0.58, w * 0.5, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Blinking neon rim lights
+  ctx.fillStyle = flapFrame === 0 ? '#00ffff' : '#ff007f';
+  ctx.beginPath();
+  ctx.arc(x + w * 0.24, y + h * 0.58, 2.5, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.5, y + h * 0.63, 2.5, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.76, y + h * 0.58, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Faint glowing tractor beam cone
+  ctx.fillStyle = 'rgba(0, 255, 255, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.35, y + h * 0.78);
+  ctx.lineTo(x + w * 0.65, y + h * 0.78);
+  ctx.lineTo(x + w * 0.8, y + h * 1.3);
+  ctx.lineTo(x + w * 0.2, y + h * 1.3);
+  ctx.closePath();
+  ctx.fill();
 
   ctx.restore();
 }
@@ -1464,7 +1549,8 @@ function _drawPreviewCanvas() {
   // Background
   const bg = activeTheme === 'classic-light' ? '#efefef'
            : activeTheme === 'classic-dark'  ? '#1c1c1e'
-           : activeTheme === 'cyberpunk'      ? '#05050a' : '#0e0625';
+           : activeTheme === 'cyberpunk'     ? '#05050a'
+           : activeTheme === 'space-nebula'  ? '#0b0217' : '#0e0625';
   pc.fillStyle = bg;
   pc.fillRect(0, 0, pw, ph);
 
@@ -1680,6 +1766,7 @@ class RunningDust extends Particle {
     this.color = activeTheme.includes('light') ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.2)';
     if (activeTheme === 'synthwave') this.color = 'rgba(255, 0, 127, 0.3)';
     if (activeTheme === 'cyberpunk') this.color = 'rgba(0, 255, 102, 0.3)';
+    if (activeTheme === 'space-nebula') this.color = 'rgba(186, 85, 211, 0.35)';
     this.size = Math.random() * 5 + 2;
     this.decay = 2.5;
   }
@@ -1705,6 +1792,7 @@ function spawnLandingSparks(x, y) {
   let col = activeTheme.includes('light') ? '#535353' : '#ffffff';
   if (activeTheme === 'synthwave') col = themeColors.secondary;
   if (activeTheme === 'cyberpunk') col = themeColors.accent;
+  if (activeTheme === 'space-nebula') col = themeColors.secondary;
   
   for (let i = 0; i < 8; i++) {
     const p = new Particle(x, y);
@@ -1724,6 +1812,7 @@ function spawnJumpDust(x, y) {
     p.vy = -Math.random() * 20;
     p.color = activeTheme.includes('light') ? 'rgba(0,0,0,0.1)' : 'rgba(255, 255, 255, 0.15)';
     if (activeTheme === 'synthwave') p.color = 'rgba(0, 243, 255, 0.3)';
+    if (activeTheme === 'space-nebula') p.color = 'rgba(0, 255, 255, 0.35)';
     p.size = Math.random() * 6 + 2;
     p.decay = 2.0;
     particles.push(p);
@@ -1804,6 +1893,12 @@ function applyTheme(themeName) {
       ground: '#00ff66', dino: '#00ff66', dinoGlow: '#00ff66',
       obstacle: '#f7e018', obstacleGlow: '#f7e018', text: '#00ff66',
       sky: '#000000', accent: '#00ff66', secondary: '#f7e018', ambientGlow: 'rgba(0, 255, 102, 0.2)'
+    };
+  } else if (themeName === 'space-nebula') {
+    themeColors = {
+      ground: '#00ffff', dino: '#ffffff', dinoGlow: '#ba55d3',
+      obstacle: '#ba55d3', obstacleGlow: '#ba55d3', text: '#ffffff',
+      sky: '#0b0217', accent: '#ba55d3', secondary: '#00ffff', ambientGlow: 'rgba(186, 85, 211, 0.25)'
     };
   }
 
@@ -2109,6 +2204,8 @@ function drawScenery(dt) {
     drawSynthwaveBackground(dt, speedFactor);
   } else if (activeTheme === 'cyberpunk') {
     drawCyberpunkBackground(dt, speedFactor);
+  } else if (activeTheme === 'space-nebula') {
+    drawSpaceBackground(dt, speedFactor);
   } else {
     // Classic Day/Night dynamic backdrop
     drawClassicBackground(dt, speedFactor);
@@ -2235,6 +2332,159 @@ function drawCyberpunkBackground(dt, speedFactor) {
 
   // Draw cyber green matrix grid
   draw3DGrid(248, 340, groundGridOffset); // Expanded end Y to match canvas height
+  
+  groundGridOffset -= currentSpeed * dt * speedFactor;
+  if (groundGridOffset <= -40) groundGridOffset = 0;
+}
+
+function drawSpaceBackground(dt, speedFactor) {
+  // 1. Draw glowing space nebula clouds
+  ctx.save();
+  
+  // Nebula 1: glowing violet/purple
+  let neb1X = 250 - (distanceRan * 0.1) % 1000;
+  if (neb1X < -200) neb1X += 1000;
+  let grad1 = ctx.createRadialGradient(neb1X, 90, 5, neb1X, 90, 160);
+  grad1.addColorStop(0, 'rgba(186, 85, 211, 0.22)');
+  grad1.addColorStop(0.5, 'rgba(123, 31, 162, 0.08)');
+  grad1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad1;
+  ctx.beginPath();
+  ctx.arc(neb1X, 90, 160, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nebula 2: cosmic cyan/teal
+  let neb2X = 750 - (distanceRan * 0.12) % 1000;
+  if (neb2X < -200) neb2X += 1000;
+  let grad2 = ctx.createRadialGradient(neb2X, 70, 5, neb2X, 70, 140);
+  grad2.addColorStop(0, 'rgba(0, 255, 255, 0.16)');
+  grad2.addColorStop(0.5, 'rgba(0, 136, 255, 0.06)');
+  grad2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad2;
+  ctx.beginPath();
+  ctx.arc(neb2X, 70, 140, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.restore();
+
+  // 2. Twinkling space stars with multi-colors and cross flares
+  ctx.save();
+  stars.forEach(star => {
+    star.alpha += Math.sin(Date.now() * 0.001 * star.pulseSpeed) * 0.05;
+    ctx.globalAlpha = Math.max(0.1, Math.min(1.0, star.alpha));
+    
+    // Choose star color based on hash value
+    const hash = Math.floor(star.x + star.y);
+    if (hash % 3 === 0) {
+      ctx.fillStyle = '#00ffff';
+    } else if (hash % 3 === 1) {
+      ctx.fillStyle = '#ba55d3';
+    } else {
+      ctx.fillStyle = '#ffffff';
+    }
+    
+    ctx.fillRect(star.x, star.y, star.size, star.size);
+    
+    // Tiny cross flare for brighter/larger stars
+    if (star.size > 1.8) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillRect(star.x - 2, star.y + 0.5, star.size + 4, 0.5);
+      ctx.fillRect(star.x + 0.5, star.y - 2, 0.5, star.size + 4);
+    }
+  });
+  ctx.restore();
+
+  // 3. Parallax Celestial Bodies & Space Stations
+  terrainFeatures.forEach((feature, idx) => {
+    feature.x -= feature.speed * 0.25 * dt * speedFactor;
+    if (feature.x + feature.width < 0) {
+      feature.x = 800 + Math.random() * 100;
+    }
+
+    ctx.save();
+    if (idx === 0) {
+      // Draw ringed planet (Saturn style)
+      const px = feature.x + feature.width / 2;
+      const py = 75;
+      const r = 20;
+
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#00ffff';
+
+      // Ring back half
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.55)';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 38, 9, Math.PI / 8, Math.PI, 0);
+      ctx.stroke();
+
+      // Planet sphere
+      let planetGrad = ctx.createLinearGradient(px - r, py - r, px + r, py + r);
+      planetGrad.addColorStop(0, '#ba55d3');
+      planetGrad.addColorStop(1, '#0e031a');
+      ctx.fillStyle = planetGrad;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ring front half
+      ctx.beginPath();
+      ctx.ellipse(px, py, 38, 9, Math.PI / 8, 0, Math.PI);
+      ctx.stroke();
+    } else if (idx === 1) {
+      // Draw distant gas planet
+      const px = feature.x + feature.width / 2;
+      const py = 95;
+      const r = 14;
+      
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#ba55d3';
+      
+      let planetGrad = ctx.createLinearGradient(px - r, py - r, px + r, py + r);
+      planetGrad.addColorStop(0, '#00ffff');
+      planetGrad.addColorStop(1, '#042129');
+      ctx.fillStyle = planetGrad;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Draw high-tech solar space station
+      const px = feature.x + feature.width / 2;
+      const py = 60;
+      
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ba55d3';
+      ctx.strokeStyle = '#ba55d3';
+      ctx.lineWidth = 1.5;
+      
+      // Central hub ring
+      ctx.beginPath();
+      ctx.arc(px, py, 14, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Core glowing reactor
+      ctx.fillStyle = '#00ffff';
+      ctx.beginPath();
+      ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Left and right solar wing struts
+      ctx.strokeStyle = '#ba55d3';
+      ctx.beginPath();
+      ctx.moveTo(px - 32, py);
+      ctx.lineTo(px + 32, py);
+      ctx.stroke();
+      
+      // Solar wing panels
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.85)';
+      ctx.fillRect(px - 32, py - 6, 12, 12);
+      ctx.fillRect(px + 20, py - 6, 12, 12);
+    }
+    ctx.restore();
+  });
+
+  // 4. Vanishing 3D perspective grid lines
+  draw3DGrid(248, 340, groundGridOffset);
   
   groundGridOffset -= currentSpeed * dt * speedFactor;
   if (groundGridOffset <= -40) groundGridOffset = 0;

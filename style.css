@@ -91,6 +91,29 @@
   --btn-accent-grad: linear-gradient(90deg, #f7e018, #f78c18);
 }
 
+/* Space Nebula Theme */
+.theme-space-nebula {
+  --bg-gradient: linear-gradient(135deg, #09031a 0%, #150530 50%, #2e094f 100%);
+  --panel-bg: rgba(21, 5, 48, 0.75);
+  --panel-border: rgba(186, 85, 211, 0.35);
+  --accent-color: #ba55d3;       /* Medium Orchid Violet */
+  --accent-glow: 0 0 15px rgba(186, 85, 211, 0.6);
+  --secondary-color: #00ffff;    /* Cosmic Cyan */
+  --secondary-glow: 0 0 15px rgba(0, 255, 255, 0.6);
+  --text-main: #f3e5f5;
+  --text-muted: #9575cd;
+  --font-hud: 'Orbitron', sans-serif;
+  --font-retro: 'Press Start 2P', monospace;
+  --font-body: 'Inter', sans-serif;
+  
+  --canvas-bg: #0b0217;
+  --canvas-border: #ba55d3;
+  --canvas-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 25px rgba(186, 85, 211, 0.3);
+  
+  --btn-grad: linear-gradient(90deg, #ba55d3, #7b1fa2);
+  --btn-accent-grad: linear-gradient(90deg, #00ffff, #0088ff);
+}
+
 /* --- RESET & GLOBAL STYLES --- */
 * {
   box-sizing: border-box;
